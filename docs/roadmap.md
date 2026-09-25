@@ -48,7 +48,8 @@ Each phase ends with a review and **explicit approval** before the next begins. 
 - **Inputs:** approved source list with ToS review; target countries.
 - **Outputs:** worker process + pg-boss; source registry; 2–4 public ATS adapters + manual job entry; raw posting store; sync scheduling, rate limiting, source health, run history.
 - **Success criteria:** scheduled syncs run unattended for a week with per-source health visible; re-runs are idempotent; zero ToS-violating access.
-- **Not included:** deduplication across sources beyond exact external id, AI enrichment, matching, search UI polish.
+- **Not included:** AI enrichment, matching, search UI polish.
+- **Scope update (2026-09-26):** India as a first-class market, configurable locations/categories/search terms, user-owned Search Profiles driving discovery, multi-layer dedupe. See [job-discovery.md](./job-discovery.md).
 
 ## Phase 3 — Job Database
 

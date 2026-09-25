@@ -8,7 +8,8 @@ export class RateLimiter {
 
   constructor(
     private readonly now: () => number = Date.now,
-    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+    private readonly sleep: (ms: number) => Promise<void> = (ms) =>
+      new Promise((r) => setTimeout(r, ms)),
   ) {}
 
   async acquire(key: string, requestsPerMinute: number): Promise<void> {

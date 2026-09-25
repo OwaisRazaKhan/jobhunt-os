@@ -56,7 +56,17 @@ export type AuditAction =
   | "match_completed"
   | "match_failed"
   | "match_invalidated"
-  | "match_version_changed";
+  | "match_version_changed"
+  | "search_profile_created"
+  | "search_profile_updated"
+  | "search_profile_duplicated"
+  | "search_profile_enabled"
+  | "search_profile_disabled"
+  | "search_profile_deleted"
+  | "search_config_updated"
+  | "discovery_started"
+  | "discovery_finished"
+  | "source_tested";
 
 export interface AuditEntry {
   userId: string;

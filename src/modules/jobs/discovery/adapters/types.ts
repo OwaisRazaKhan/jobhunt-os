@@ -42,10 +42,15 @@ export interface BoardFetchResult {
 export interface SourceAdapter {
   key: AtsSourceKey;
   fetchBoard(board: BoardEntry, ctx: AdapterContext): Promise<BoardFetchResult>;
-  toCanonical(posting: RawPosting, board: BoardEntry, ctx: Pick<AdapterContext, "options">): CanonicalJobInput;
+  toCanonical(
+    posting: RawPosting,
+    board: BoardEntry,
+    ctx: Pick<AdapterContext, "options">,
+  ): CanonicalJobInput;
 }
 
-export const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+export const str = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() ? v.trim() : null;
 export const date = (v: unknown): Date | null => {
   if (typeof v !== "string" && typeof v !== "number") return null;
   const d = new Date(v);

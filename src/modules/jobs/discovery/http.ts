@@ -23,7 +23,15 @@ export const ALLOWED_HOSTS = new Set([
 export const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 const USER_AGENT = "JOBHUNT-OS/0.1 (personal job-search assistant; respects provider rate limits)";
 
-export type FetchErrorKind = "TIMEOUT" | "NETWORK" | "HTTP_CLIENT" | "HTTP_SERVER" | "RATE_LIMITED" | "TOO_LARGE" | "INVALID_JSON" | "BLOCKED_HOST";
+export type FetchErrorKind =
+  | "TIMEOUT"
+  | "NETWORK"
+  | "HTTP_CLIENT"
+  | "HTTP_SERVER"
+  | "RATE_LIMITED"
+  | "TOO_LARGE"
+  | "INVALID_JSON"
+  | "BLOCKED_HOST";
 
 export class SourceFetchError extends Error {
   constructor(
@@ -52,7 +60,13 @@ const defaultSleep = (ms: number) => new Promise((resolve) => setTimeout(resolve
 
 export function assertAllowedUrl(url: string): URL {
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || !ALLOWED_HOSTS.has(parsed.hostname) || parsed.username || parsed.password || parsed.port) {
+  if (
+    parsed.protocol !== "https:" ||
+    !ALLOWED_HOSTS.has(parsed.hostname) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port
+  ) {
     throw new SourceFetchError("BLOCKED_HOST", `Host not allowed: ${parsed.hostname}`);
   }
   return parsed;
@@ -60,7 +74,8 @@ export function assertAllowedUrl(url: string): URL {
 
 async function readLimited(response: Response, maxBytes: number): Promise<string> {
   const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > maxBytes) throw new SourceFetchError("TOO_LARGE", `Response too large (${declared} bytes)`);
+  if (declared > maxBytes)
+    throw new SourceFetchError("TOO_LARGE", `Response too large (${declared} bytes)`);
   if (!response.body) return "";
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -120,12 +135,27 @@ export async function fetchJson(url: string, options: FetchOptions): Promise<unk
       retryAfter = response.headers.get("retry-after");
       await response.body?.cancel();
       if (response.status === 429) {
-        lastError = new SourceFetchError("RATE_LIMITED", "Provider rate limit (HTTP 429)", 429, true);
+        lastError = new SourceFetchError(
+          "RATE_LIMITED",
+          "Provider rate limit (HTTP 429)",
+          429,
+          true,
+        );
       } else if (response.status >= 500) {
-        lastError = new SourceFetchError("HTTP_SERVER", `Provider error (HTTP ${response.status})`, response.status, true);
+        lastError = new SourceFetchError(
+          "HTTP_SERVER",
+          `Provider error (HTTP ${response.status})`,
+          response.status,
+          true,
+        );
       } else {
         // 400/401/403/404 etc.: not transient — never retried.
-        const reason = response.status === 404 ? "Board not found (HTTP 404) — check the identifier" : response.status === 401 || response.status === 403 ? `Access denied (HTTP ${response.status})` : `Request rejected (HTTP ${response.status})`;
+        const reason =
+          response.status === 404
+            ? "Board not found (HTTP 404) — check the identifier"
+            : response.status === 401 || response.status === 403
+              ? `Access denied (HTTP ${response.status})`
+              : `Request rejected (HTTP ${response.status})`;
         throw new SourceFetchError("HTTP_CLIENT", reason, response.status, false);
       }
     } catch (error) {
@@ -133,12 +163,22 @@ export async function fetchJson(url: string, options: FetchOptions): Promise<unk
         if (!error.retryable) throw error;
         lastError = error;
       } else if (controller.signal.aborted && !options.signal?.aborted) {
-        lastError = new SourceFetchError("TIMEOUT", `Timed out after ${options.timeoutMs} ms`, undefined, true);
+        lastError = new SourceFetchError(
+          "TIMEOUT",
+          `Timed out after ${options.timeoutMs} ms`,
+          undefined,
+          true,
+        );
       } else if (options.signal?.aborted) {
         throw new SourceFetchError("TIMEOUT", "Sync aborted");
       } else {
         const code = (error as { cause?: { code?: string } })?.cause?.code;
-        lastError = new SourceFetchError("NETWORK", `Network error${code ? ` (${code})` : ""}`, undefined, true);
+        lastError = new SourceFetchError(
+          "NETWORK",
+          `Network error${code ? ` (${code})` : ""}`,
+          undefined,
+          true,
+        );
       }
     } finally {
       clearTimeout(timer);

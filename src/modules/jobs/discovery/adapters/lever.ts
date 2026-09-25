@@ -1,5 +1,10 @@
 import "server-only";
-import { extractVisaWording, normalizeEmploymentType, normalizeInterval, normalizeWorkplace } from "../../normalize/fields";
+import {
+  extractVisaWording,
+  normalizeEmploymentType,
+  normalizeInterval,
+  normalizeWorkplace,
+} from "../../normalize/fields";
 import { htmlToText } from "../../normalize/html";
 import { normalizeLocation } from "../../normalize/location";
 import { joinLocations } from "../../normalize/text";
@@ -15,11 +20,14 @@ import { date, str, type SourceAdapter } from "./types";
  */
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
+const obj = (v: unknown): Obj =>
+  v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {};
 const arr = (v: unknown): Obj[] => (Array.isArray(v) ? v.map(obj) : []);
 
 function baseUrl(options?: Record<string, unknown>) {
-  return options?.region === "EU" ? "https://api.eu.lever.co/v0/postings" : "https://api.lever.co/v0/postings";
+  return options?.region === "EU"
+    ? "https://api.eu.lever.co/v0/postings"
+    : "https://api.lever.co/v0/postings";
 }
 
 export const leverAdapter: SourceAdapter = {
@@ -61,7 +69,9 @@ export const leverAdapter: SourceAdapter = {
   toCanonical({ externalId, raw }, board, ctx) {
     const categories = obj(raw.categories);
     const primary = str(categories.location);
-    const all = (Array.isArray(categories.allLocations) ? categories.allLocations : []).map(String).filter(Boolean);
+    const all = (Array.isArray(categories.allLocations) ? categories.allLocations : [])
+      .map(String)
+      .filter(Boolean);
     const locationRaw = joinLocations(all.length ? all : [primary]) || NOT_STATED;
     const location = normalizeLocation(primary ?? all[0], { countryCode: str(raw.country) });
 
@@ -70,15 +80,25 @@ export const leverAdapter: SourceAdapter = {
     if (remoteStatus === "UNKNOWN" && location.remoteWord) remoteStatus = location.remoteWord;
 
     const lists = arr(raw.lists)
-      .map((l) => [str(l.text), str(l.content) ? htmlToText(String(l.content)) : null].filter(Boolean).join("\n"))
+      .map((l) =>
+        [str(l.text), str(l.content) ? htmlToText(String(l.content)) : null]
+          .filter(Boolean)
+          .join("\n"),
+      )
       .filter(Boolean);
     const description =
-      [str(raw.descriptionPlain) ?? (str(raw.description) ? htmlToText(String(raw.description)) : null), ...lists, str(raw.additionalPlain)]
+      [
+        str(raw.descriptionPlain) ??
+          (str(raw.description) ? htmlToText(String(raw.description)) : null),
+        ...lists,
+        str(raw.additionalPlain),
+      ]
         .filter(Boolean)
         .join("\n\n") || NOT_STATED;
 
     const salary = obj(raw.salaryRange);
-    const hasSalary = (typeof salary.min === "number" || typeof salary.max === "number") && str(salary.currency);
+    const hasSalary =
+      (typeof salary.min === "number" || typeof salary.max === "number") && str(salary.currency);
 
     return {
       sourceKey: "LEVER",
@@ -108,7 +128,18 @@ export const leverAdapter: SourceAdapter = {
       department: str(categories.department),
       team: str(categories.team),
       visaTextRaw: extractVisaWording(description),
-      raw: { ...raw, description: undefined, descriptionPlain: undefined, descriptionBody: undefined, descriptionBodyPlain: undefined, lists: undefined, additional: undefined, additionalPlain: undefined, opening: undefined, openingPlain: undefined },
+      raw: {
+        ...raw,
+        description: undefined,
+        descriptionPlain: undefined,
+        descriptionBody: undefined,
+        descriptionBodyPlain: undefined,
+        lists: undefined,
+        additional: undefined,
+        additionalPlain: undefined,
+        opening: undefined,
+        openingPlain: undefined,
+      },
     };
   },
 };

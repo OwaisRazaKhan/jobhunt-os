@@ -8,7 +8,10 @@ import { normalizeOrganization, normalizeTitle } from "@/lib/text-normalize";
  * anything is written. Unknown values are null / "UNKNOWN" — never guessed.
  */
 
-const url = z.string().max(2048).refine((v) => checkPublicHttpUrl(v).ok, "Unsafe or invalid URL");
+const url = z
+  .string()
+  .max(2048)
+  .refine((v) => checkPublicHttpUrl(v).ok, "Unsafe or invalid URL");
 const optUrl = url.nullable();
 const text = (max: number) => z.string().trim().min(1).max(max);
 const optText = (max: number) => z.string().trim().max(max).nullable();
@@ -24,14 +27,29 @@ export const canonicalJobSchema = z
     locationRaw: text(200),
     city: optText(120),
     region: optText(120),
-    countryCode: z.string().regex(/^[A-Z]{2}$/).nullable(),
-    employmentType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY", "INTERNSHIP", "APPRENTICESHIP", "FREELANCE", "UNKNOWN"]),
+    countryCode: z
+      .string()
+      .regex(/^[A-Z]{2}$/)
+      .nullable(),
+    employmentType: z.enum([
+      "FULL_TIME",
+      "PART_TIME",
+      "CONTRACT",
+      "TEMPORARY",
+      "INTERNSHIP",
+      "APPRENTICESHIP",
+      "FREELANCE",
+      "UNKNOWN",
+    ]),
     employmentTypeRaw: optText(100),
     remoteStatus: z.enum(["REMOTE", "HYBRID", "ONSITE", "UNKNOWN"]),
     remoteStatusRaw: optText(100),
     salaryMin: z.number().int().min(0).max(1_000_000_000).nullable(),
     salaryMax: z.number().int().min(0).max(1_000_000_000).nullable(),
-    salaryCurrency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+    salaryCurrency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
     salaryPeriod: z.enum(["YEAR", "MONTH", "WEEK", "HOUR"]).nullable(),
     salaryRaw: optText(500),
     postedAt: z.date().nullable(),
@@ -44,8 +62,14 @@ export const canonicalJobSchema = z
     visaTextRaw: optText(2000),
     raw: z.record(z.string(), z.unknown()),
   })
-  .refine((j) => j.salaryMin == null || j.salaryMax == null || j.salaryMin <= j.salaryMax, { message: "salary min > max", path: ["salaryMin"] })
-  .refine((j) => (j.salaryMin == null && j.salaryMax == null) || j.salaryCurrency !== null, { message: "salary without currency", path: ["salaryCurrency"] });
+  .refine((j) => j.salaryMin == null || j.salaryMax == null || j.salaryMin <= j.salaryMax, {
+    message: "salary min > max",
+    path: ["salaryMin"],
+  })
+  .refine((j) => (j.salaryMin == null && j.salaryMax == null) || j.salaryCurrency !== null, {
+    message: "salary without currency",
+    path: ["salaryCurrency"],
+  });
 
 export type CanonicalJob = z.output<typeof canonicalJobSchema>;
 export type CanonicalJobInput = z.input<typeof canonicalJobSchema>;
@@ -78,12 +102,26 @@ export function canonicalContentHash(job: CanonicalJob): string {
   );
 }
 
-export function normalizeLocationKey(job: Pick<CanonicalJob, "city" | "countryCode" | "locationRaw" | "remoteStatus">): string {
-  if (job.city || job.countryCode) return `${(job.city ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")}|${job.countryCode ?? ""}`;
+export function normalizeLocationKey(
+  job: Pick<CanonicalJob, "city" | "countryCode" | "locationRaw" | "remoteStatus">,
+): string {
+  if (job.city || job.countryCode)
+    return `${(job.city ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")}|${job.countryCode ?? ""}`;
   return job.locationRaw.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /** Layer-2 identity: normalised company + title + location. */
-export function dedupeFingerprint(job: Pick<CanonicalJob, "companyName" | "title" | "city" | "countryCode" | "locationRaw" | "remoteStatus">): string {
-  return sha256([normalizeOrganization(job.companyName), normalizeTitle(job.title), normalizeLocationKey(job)].join("|"));
+export function dedupeFingerprint(
+  job: Pick<
+    CanonicalJob,
+    "companyName" | "title" | "city" | "countryCode" | "locationRaw" | "remoteStatus"
+  >,
+): string {
+  return sha256(
+    [
+      normalizeOrganization(job.companyName),
+      normalizeTitle(job.title),
+      normalizeLocationKey(job),
+    ].join("|"),
+  );
 }

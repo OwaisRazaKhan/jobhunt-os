@@ -16,7 +16,8 @@ import { date, str, type SourceAdapter } from "./types";
 
 const API = "https://boards-api.greenhouse.io/v1/boards";
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
+const obj = (v: unknown): Obj =>
+  v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {};
 const arr = (v: unknown): Obj[] => (Array.isArray(v) ? v.map(obj) : []);
 
 export const greenhouseAdapter: SourceAdapter = {
@@ -34,7 +35,9 @@ export const greenhouseAdapter: SourceAdapter = {
       }),
     );
     const jobs = arr(body.jobs).filter((j) => typeof j.id === "number" || typeof j.id === "string");
-    const postings = jobs.slice(0, ctx.limits.maxJobs).map((raw) => ({ externalId: String(raw.id), raw }));
+    const postings = jobs
+      .slice(0, ctx.limits.maxJobs)
+      .map((raw) => ({ externalId: String(raw.id), raw }));
     return { postings, truncated: jobs.length > postings.length, requests: 1, endpoint };
   },
 
@@ -44,11 +47,17 @@ export const greenhouseAdapter: SourceAdapter = {
     const description = (str(raw.content) ? htmlToText(String(raw.content)) : null) ?? NOT_STATED;
 
     // Employment type only when the board exposes it explicitly as metadata.
-    const employmentMeta = arr(raw.metadata).find((m) => /employment\s*type|commitment/i.test(String(m.name ?? "")));
+    const employmentMeta = arr(raw.metadata).find((m) =>
+      /employment\s*type|commitment/i.test(String(m.name ?? "")),
+    );
     const employmentRaw = typeof employmentMeta?.value === "string" ? employmentMeta.value : null;
 
     // Pay transparency ranges are in cents. Greenhouse does not state the period, so it stays unknown.
-    const pay = arr(raw.pay_input_ranges).find((p) => (typeof p.min_cents === "number" || typeof p.max_cents === "number") && str(p.currency_type));
+    const pay = arr(raw.pay_input_ranges).find(
+      (p) =>
+        (typeof p.min_cents === "number" || typeof p.max_cents === "number") &&
+        str(p.currency_type),
+    );
     const cents = (v: unknown) => (typeof v === "number" ? Math.round(v / 100) : null);
 
     return {

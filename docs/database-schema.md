@@ -17,6 +17,10 @@ Deliberate deviations from the design below (details in [candidate-intelligence.
 - `user_settings` is deferred. `audit_logs` has no `updated_at` (append-only).
 - Account deletion cascades audit logs immediately (no 30-day legal hold yet).
 
+## 0a. Phase 2 discovery (Checkpoints 9–10)
+
+Migration `20260927020000_phase2_discovery`: `market_locations`, `job_categories`, `job_category_terms` (system rows `user_id NULL` + user rows), `search_profiles` + `search_profile_locations` + `search_profile_categories` (owner-only), `job_source_postings` (multi-source postings, unique source+board+external id), `job_duplicate_candidates` (PENDING review, never merged), `job_category_assignments` (derived; RULE/AI/USER with confidence and model), `job_search_profile_hits` (owner-only job↔profile), `discovery_runs` + `source_sync_runs` (owner-only history; one active run per user). New `jobs` columns: department, team, experience_level(+raw), dedupe_fingerprint, source_updated_at, last_content_change_at, closed_at. India flagged as target market. Details: [job-discovery.md](./job-discovery.md).
+
 ## 0b. Phase 2 as built (Checkpoints 2–3)
 
 - `job_sources` (migration `20260927000000_phase2_job_sources`): **user-owned** source configuration (a deliberate change from the global design, per the Phase 2 brief). One row per user per source (ASHBY, LEVER, GREENHOUSE, MANUAL); status/terms are internal states enforced by CHECKs; `terms_status = VERIFIED` requires `terms_reviewed_at`. RLS: owner only.
