@@ -2,12 +2,10 @@ import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PREFIXES = ["/candidate", "/jobs", "/settings", "/welcome"];
-const AUTH_PAGES = ["/sign-in", "/sign-up"];
 const REQUEST_ID_HEADER = "x-request-id";
 
 /**
- * Optimistic gate only: checks for the presence of a session cookie so
- * unauthenticated users are redirected early. Real authorization happens in
+ * Optimistic gate only: a missing session cookie redirects to sign-in early. Real authorization happens in
  * services (every call is scoped to the verified session's user).
  */
 export function proxy(request: NextRequest) {
@@ -20,11 +18,9 @@ export function proxy(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
-  if (hasSession && AUTH_PAGES.includes(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/candidate";
-    return NextResponse.redirect(url);
-  }
+  // Signed-in users are sent away from /sign-in and /sign-up by those pages themselves, after
+  // validating the session. Doing it here on cookie presence alone loops forever when the
+  // cookie is stale (expired session, rotated secret, different database).
 
   const requestHeaders = new Headers(request.headers);
   const requestId = requestHeaders.get(REQUEST_ID_HEADER) ?? crypto.randomUUID();
