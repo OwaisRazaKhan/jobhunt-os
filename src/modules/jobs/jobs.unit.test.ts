@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkPublicHttpUrl, isPublicHttpUrl } from "@/lib/safe-url";
 import { normalizeOrganization, normalizeTitle } from "@/lib/text-normalize";
 import { manualJobInput } from "./jobs.schemas";
-import { sourceConfigInput } from "./sources.schemas";
+import { boardFromUrl, sourceConfigInput } from "./sources.schemas";
 
 const valid = {
   title: "Test Role",
@@ -137,14 +137,42 @@ describe("manualJobInput validation", () => {
 });
 
 describe("source configuration schema", () => {
-  it("applies default rate limits and rejects URLs as identifiers", () => {
+  it("applies default rate limits; accepts the provider's own link, rejects other URLs", () => {
     expect(sourceConfigInput("ASHBY").parse({ boards: "acme" })).toMatchObject({
       boards: ["acme"],
       requestsPerMinute: 30,
       maxPagesPerSync: 10,
     });
     expect(
-      sourceConfigInput("ASHBY").safeParse({ boards: "https://jobs.ashbyhq.com/acme" }).success,
+      sourceConfigInput("ASHBY").parse({ boards: "https://jobs.ashbyhq.com/acme" }).boards,
+    ).toEqual(["acme"]);
+    expect(
+      sourceConfigInput("ASHBY").safeParse({ boards: "https://example.com/acme" }).success,
     ).toBe(false);
+  });
+});
+
+describe("careers links → board names", () => {
+  it.each([
+    ["LEVER", "https://jobs.lever.co/cred/?location=bengaluru", "cred"],
+    ["LEVER", "jobs.eu.lever.co/acme/1234-abc", "acme"],
+    ["GREENHOUSE", "https://job-boards.greenhouse.io/figma/jobs/5993654004", "figma"],
+    ["GREENHOUSE", "https://boards.greenhouse.io/samsara", "samsara"],
+    ["ASHBY", "https://jobs.ashbyhq.com/sarvam", "sarvam"],
+    ["ASHBY", "https://jobs.ashbyhq.com/Wisdom-AI/a590329c = Wisdom AI", "Wisdom-AI = Wisdom AI"],
+  ])("%s %s → %s", (key, url, board) => {
+    expect(boardFromUrl(key, url)).toBe(board);
+  });
+
+  it("leaves other providers, other sites and embed links unchanged", () => {
+    expect(boardFromUrl("GREENHOUSE", "https://jobs.lever.co/cred")).toBe(
+      "https://jobs.lever.co/cred",
+    );
+    expect(boardFromUrl("ASHBY", "https://evil.example/jobs.ashbyhq.com/x")).toBe(
+      "https://evil.example/jobs.ashbyhq.com/x",
+    );
+    const embed = "https://boards.greenhouse.io/embed/job_board?for=figma";
+    expect(boardFromUrl("GREENHOUSE", embed)).toBe(embed);
+    expect(boardFromUrl("MANUAL", "cred")).toBe("cred");
   });
 });

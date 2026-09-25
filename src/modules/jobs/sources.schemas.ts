@@ -133,6 +133,28 @@ export interface BoardEntry {
   name: string | null;
 }
 
+/** Careers-page hosts per provider; the first path segment is the board name (never fetched). */
+const BOARD_URL_HOSTS: Record<string, string> = {
+  ASHBY: "jobs\\.ashbyhq\\.com",
+  LEVER: "jobs(?:\\.eu)?\\.lever\\.co",
+  GREENHOUSE: "(?:job-)?boards(?:\\.eu)?\\.greenhouse\\.io",
+};
+
+/**
+ * "https://jobs.lever.co/cred/?location=x = CRED" → "cred = CRED" for the matching provider.
+ * Links of another provider (or any other site) are left as-is and fail validation.
+ */
+export function boardFromUrl(key: string, value: string): string {
+  const host = BOARD_URL_HOSTS[key];
+  if (!host) return value;
+  const re = new RegExp(
+    `^(?:https?://)?(?:www\\.)?${host}/(?!embed(?:[/?#]|$))([A-Za-z0-9][A-Za-z0-9._-]{0,99})(?:[/?#]\\S*)?(\\s+=.*)?$`,
+    "i",
+  );
+  const m = value.trim().match(re);
+  return m ? `${m[1]}${m[2] ?? ""}` : value;
+}
+
 export function parseBoardEntry(value: string): BoardEntry | null {
   const m = value.trim().match(BOARD_ENTRY);
   if (!m) return null;
@@ -140,7 +162,7 @@ export function parseBoardEntry(value: string): BoardEntry | null {
   return { id: m[1]!, name };
 }
 
-const identifierList = (label: string) =>
+const identifierList = (label: string, key: string) =>
   z.preprocess(
     (value) => {
       const raw = Array.isArray(value)
@@ -150,7 +172,7 @@ const identifierList = (label: string) =>
           : [];
       const seen = new Set<string>();
       const out: string[] = [];
-      for (const item of raw.map((v) => String(v).trim()).filter(Boolean)) {
+      for (const item of raw.map((v) => boardFromUrl(key, String(v)).trim()).filter(Boolean)) {
         const id = parseBoardEntry(item)?.id.toLowerCase() ?? item;
         if (!seen.has(id)) {
           seen.add(id);
@@ -165,7 +187,7 @@ const identifierList = (label: string) =>
           .string()
           .refine(
             (v) => parseBoardEntry(v) !== null,
-            `Enter the ${label} only (optionally “${label} = Company name”) — not a full URL`,
+            `Enter the ${label} (optionally “${label} = Company name”) or paste the company's careers link`,
           ),
       )
       .max(50, "Up to 50 entries"),
@@ -199,12 +221,12 @@ export const rateLimitSchema = z.object({
 export type RateLimitSettings = z.output<typeof rateLimitSchema>;
 
 export const CONFIG_SCHEMAS = {
-  ASHBY: z.object({ boards: identifierList("board name") }),
+  ASHBY: z.object({ boards: identifierList("board name", "ASHBY") }),
   LEVER: z.object({
-    sites: identifierList("site name"),
+    sites: identifierList("site name", "LEVER"),
     region: z.preprocess((v) => (v === "" || v == null ? "GLOBAL" : v), z.enum(["GLOBAL", "EU"])),
   }),
-  GREENHOUSE: z.object({ boardTokens: identifierList("board token") }),
+  GREENHOUSE: z.object({ boardTokens: identifierList("board token", "GREENHOUSE") }),
   MANUAL: z.object({}),
 } as const;
 

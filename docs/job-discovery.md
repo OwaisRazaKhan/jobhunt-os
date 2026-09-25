@@ -94,6 +94,11 @@ Running discovery (CP12):
 | `/jobs/sources` | Per source: status, terms review, boards, last sync/success/test/error, jobs discovered, **health**, Configure, **Test** (live, max 3 boards, no catalog writes) and **History**. |
 | `/jobs/sources/[id]` | Source history: every TEST and SYNC run (`source_sync_runs`) newest first — time, kind, board, status, requests, counts, duration, error — plus the health summary. |
 
+Board configuration accepts the board name **or the provider's own careers link**
+(`jobs.ashbyhq.com/<board>`, `jobs[.eu].lever.co/<site>`, `[job-]boards[.eu].greenhouse.io/<token>`);
+`boardFromUrl` keeps only the first path segment. Other providers' links, other sites and Greenhouse
+`embed` links are rejected, and links are never fetched when saved.
+
 Source health (`src/modules/jobs/source-health.ts`, pure + unit-tested) is computed from the latest 20
 finished runs of the source: no runs → `UNTESTED` (or `DISABLED`), latest 3 failed in a row →
 `FAILING`, any failure in the window → `DEGRADED`, otherwise `HEALTHY`. Manual Entry is

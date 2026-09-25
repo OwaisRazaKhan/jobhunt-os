@@ -110,11 +110,18 @@ describe("source configuration", () => {
     expect(updated.status).toBe("PENDING_VERIFICATION");
   });
 
-  it("rejects full URLs, unsafe identifiers and out-of-range limits", async () => {
+  it("accepts the provider's own careers link, rejects other URLs, unsafe identifiers and out-of-range limits", async () => {
     const ashby = await byKey(userA, "ASHBY");
-    await expect(
-      updateSourceConfiguration(userA, ashby.id, { boards: "https://jobs.ashbyhq.com/acme" }),
-    ).rejects.toBeInstanceOf(ZodError);
+    const saved = await updateSourceConfiguration(userA, ashby.id, {
+      boards: "https://jobs.ashbyhq.com/Acme/7aaa13dc?utm=x = Acme Inc",
+    });
+    expect((saved.configuration as { boards: string[] }).boards).toEqual(["Acme = Acme Inc"]);
+    // Another provider's link or any other site is not silently turned into a board name.
+    for (const bad of ["https://jobs.lever.co/acme", "https://example.com/acme"]) {
+      await expect(
+        updateSourceConfiguration(userA, ashby.id, { boards: bad }),
+      ).rejects.toBeInstanceOf(ZodError);
+    }
     await expect(
       updateSourceConfiguration(userA, ashby.id, { boards: "../etc/passwd" }),
     ).rejects.toBeInstanceOf(ZodError);
