@@ -151,3 +151,36 @@ select cron.schedule(
 ```
 
 pg_cron cannot reach `localhost`; on a local machine use `npm run scheduler`.
+
+## 9. Reliability hardening (CP15)
+
+- **Auto-pause:** when the last `AUTO_PAUSE_AFTER` (5) discovery syncs of a source all failed, the
+  source is disabled, `last_error` says "Paused automatically after 5 failed syncs in a row…", and a
+  `source_auto_paused` audit entry is written. Manual tests never count. Re-enable it on Sources.
+- **Stale work:** runs without a heartbeat for 10 min are failed, and so are their `RUNNING` board
+  rows (`error_kind = STALE`). A crashed run marks its unfinished board rows `FAILED` (`INTERNAL`).
+- **API errors:** discovery endpoints return 401 without a session, 400 for malformed ids / non-JSON
+  bodies, 404 for another user's run; the cron endpoint 404 when disabled, 401 on a bad secret.
+
+## 10. Phase 2 acceptance (verified 2026-09-25)
+
+| #   | Criterion                                                      | Status                   | Evidence                                                                                                             |
+| --- | -------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1   | Source registry with honest states and ToS review              | ✅                       | `job_sources`, `sources.schemas.ts`; `sources.test.ts`                                                               |
+| 2   | 2–4 public ATS adapters + manual entry                         | ✅                       | Ashby, Lever, Greenhouse public posting APIs + Manual; `adapters.test.ts`                                            |
+| 3   | Raw posting store                                              | ✅                       | `job_source_postings.raw` (long text stripped)                                                                       |
+| 4   | Rate limiting, honest user agent, 429 / Retry-After            | ✅                       | `rate-limiter.ts`, `http.ts`                                                                                         |
+| 5   | Run history per discovery and per board                        | ✅                       | `discovery_runs`, `source_sync_runs`; `/jobs/discovery`, `/jobs/sources/[id]`                                        |
+| 6   | Per-source health visible                                      | ✅                       | `source-health.ts` + Sources page; `source-health.test.ts`                                                           |
+| 7   | Sync scheduling                                                | ✅                       | cron endpoint + `npm run scheduler`; `scheduler.test.ts`                                                             |
+| 8   | Re-runs are idempotent                                         | ✅                       | layer-1 dedupe (unchanged/updated), claims never double-run; `discovery.test.ts`                                     |
+| 9   | Zero ToS-violating access                                      | ✅                       | only documented public APIs, no scraping, no CAPTCHA/login bypass                                                    |
+| 10  | India first-class, configurable locations / categories / terms | ✅                       | seeded config + `/jobs/profiles/configuration`; `discovery.test.ts`                                                  |
+| 11  | Search Profiles drive discovery; one job ↔ many profiles       | ✅                       | `job_search_profile_hits`; `discovery.test.ts`                                                                       |
+| 12  | Multi-layer dedupe, possible duplicates flagged never merged   | ✅                       | `ingest.ts`; `discovery.test.ts`                                                                                     |
+| 13  | Scheduled syncs run unattended for a week                      | ⏳ HUMAN ACTION REQUIRED | Needs a week of `npm run scheduler` against Supabase JOBHUNTOS with real boards; cannot be observed from a test run. |
+
+**Deviation from the original plan:** no separate worker process / pg-boss. Runs execute in-process
+after the response (`after()`), triggered by the UI or the cron endpoint; stale-run detection and
+atomic claiming replace queue semantics. Free, no extra infrastructure. A queue can be added in
+Phase 13 if volumes require it.

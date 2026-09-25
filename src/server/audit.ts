@@ -49,6 +49,7 @@ export type AuditAction =
   | "source_updated"
   | "source_enabled"
   | "source_disabled"
+  | "source_auto_paused"
   | "job_created"
   | "job_updated"
   | "job_deleted"

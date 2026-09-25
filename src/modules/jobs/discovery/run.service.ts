@@ -38,6 +38,8 @@ type ActorRef = { userId: string };
 
 /** A RUNNING run without a heartbeat for this long is considered dead. */
 export const STALE_RUN_MS = 10 * 60_000;
+/** A source whose last N discovery syncs all failed is disabled (protects the provider and the user). */
+export const AUTO_PAUSE_AFTER = 5;
 
 interface PlannedBoard {
   sourceId: string;
@@ -86,6 +88,16 @@ async function failStaleRuns(t: Tx, actor: ActorRef) {
       stage: "DONE",
       finishedAt: new Date(),
       message: "The run stopped responding and was marked failed.",
+    },
+  });
+  // Board rows of runs that died mid-way must not stay RUNNING forever.
+  await t.sourceSyncRun.updateMany({
+    where: { userId: actor.userId, status: "RUNNING", startedAt: { lt: cutoff } },
+    data: {
+      status: "FAILED",
+      errorKind: "STALE",
+      errorMessage: "The run stopped responding before this board finished.",
+      finishedAt: new Date(),
     },
   });
 }
@@ -481,6 +493,37 @@ async function processBoard(
           lastError: `${plan.board.id}: ${message}`.slice(0, 1000),
         },
       });
+      const recent = await t.sourceSyncRun.findMany({
+        where: {
+          userId: actor.userId,
+          sourceId: plan.sourceId,
+          kind: "SYNC",
+          status: { in: ["SUCCEEDED", "FAILED"] },
+        },
+        orderBy: { startedAt: "desc" },
+        take: AUTO_PAUSE_AFTER,
+        select: { status: true },
+      });
+      if (recent.length === AUTO_PAUSE_AFTER && recent.every((r) => r.status === "FAILED")) {
+        await t.jobSource.update({
+          where: { id: plan.sourceId },
+          data: {
+            enabled: false,
+            lastError:
+              `Paused automatically after ${AUTO_PAUSE_AFTER} failed syncs in a row. Last: ${plan.board.id}: ${message}`.slice(
+                0,
+                1000,
+              ),
+          },
+        });
+        await recordAudit(t, {
+          userId: actor.userId,
+          action: "source_auto_paused",
+          resourceType: "job_source",
+          resourceId: plan.sourceId,
+          metadata: { sourceKey: plan.sourceKey, failures: AUTO_PAUSE_AFTER, kind },
+        });
+      }
     });
     return { ok: false, counts };
   }
@@ -612,6 +655,17 @@ export async function executeDiscoveryRun(actor: ActorRef, runId: string) {
           stage: "DONE",
           finishedAt: new Date(),
           message: "The run failed unexpectedly. Nothing was lost; you can run it again.",
+        },
+      }),
+    ).catch(() => undefined);
+    await withUserContext(actor.userId, (t) =>
+      t.sourceSyncRun.updateMany({
+        where: { discoveryRunId: runId, status: "RUNNING" },
+        data: {
+          status: "FAILED",
+          errorKind: "INTERNAL",
+          errorMessage: "The run failed unexpectedly before this board finished.",
+          finishedAt: new Date(),
         },
       }),
     ).catch(() => undefined);

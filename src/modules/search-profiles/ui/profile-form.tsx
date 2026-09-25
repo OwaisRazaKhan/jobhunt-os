@@ -90,7 +90,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-border flex flex-col gap-3 border-t pt-4 first:border-t-0 first:pt-0">
+    <section className="border-border flex flex-col gap-3 border-t pt-4 first-of-type:border-t-0 first-of-type:pt-0">
       <div>
         <h2 className="text-[13px] font-semibold">{title}</h2>
         {hint && <p className="text-fg-muted mt-0.5 text-xs">{hint}</p>}

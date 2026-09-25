@@ -41,7 +41,9 @@ Each phase ends with a review and **explicit approval** before the next begins. 
 - **Success criteria:** a user can upload a CV, review every extracted fact, and end with a complete profile where each fact has correct provenance; AI can never set VERIFIED (tested); authz matrix passes; export returns all data.
 - **Not included:** jobs, matching, document generation, Gmail, workflows.
 
-## Phase 2 — Job Discovery
+## Phase 2 — Job Discovery ✅ (awaiting approval — see job-discovery.md §10)
+
+> As built: Search Profiles + discovery UI, public ATS adapters (Ashby, Lever, Greenhouse) + Manual, in-process runs via `after()` with a secret-protected cron endpoint and a local scheduler (no pg-boss worker), source health with auto-pause. One criterion needs a week of real-world observation (§10 #13).
 
 - **Objective:** ingest jobs from legitimate sources reliably.
 - **Dependencies:** Phase 1 (auth, DB, worker infra decision).
