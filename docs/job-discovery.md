@@ -101,3 +101,53 @@ finished runs of the source: no runs → `UNTESTED` (or `DISABLED`), latest 3 fa
 
 Server Actions live in `src/app/(app)/jobs/profiles/actions.ts` (thin: auth → service). Deleting a profile
 removes its hits only; canonical jobs and run history are kept.
+
+## 8. Scheduling (CP14, free)
+
+A Search Profile with an automatic-run interval (`schedule_interval_hours` 24 / 72 / 168) is **due**
+when `next_run_at <= now`. Enabling or changing the schedule sets `next_run_at = now + interval`;
+every finished run sets it again from its finish time.
+
+**Endpoint** — `POST` (or `GET`) `/api/internal/cron/discovery` with
+`Authorization: Bearer <CRON_SECRET>` (`src/config/env.ts`; unset = endpoint returns 404, wrong or
+missing secret = 401, constant-time comparison).
+
+1. `claimDueProfiles` (owner client — the only cross-user step; reads `id`, `user_id`, `next_run_at`)
+   picks up to `CRON_MAX_PROFILES` (default 5) due, enabled profiles and **claims** each with a
+   compare-and-set that moves `next_run_at` one interval ahead. Two overlapping cron calls can never
+   claim the same profile.
+2. The response (`202 { data: { claimed } }`) is returned; `after()` runs the claimed profiles **one
+   after another** through the normal RLS-scoped pipeline with `trigger = SCHEDULED`.
+3. A profile whose user already has an active run is retried 30 min later. A profile that cannot run
+   (disabled, no boards) keeps its next interval and gets a `CANCELLED` run with the message
+   "Scheduled run skipped: …", visible under Recent runs.
+
+**Ways to call it (all free):**
+
+| Option                      | How                                                                                                                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local loop                  | `npm run scheduler` next to `npm run dev` / `npm start` — ticks every `SCHEDULER_INTERVAL_MINUTES` (default 15).                                                             |
+| Single tick                 | `npm run scheduler -- --once` from Windows Task Scheduler / cron (exit code 0 = ok).                                                                                         |
+| GitHub Actions              | A scheduled workflow running `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<your-app>/api/internal/cron/discovery` (only when the app is publicly deployed). |
+| Supabase pg_cron (optional) | Only when the app has a public URL. Enable `pg_cron` + `pg_net`, keep the secret in Vault, then:                                                                             |
+
+```sql
+-- Supabase SQL editor (optional). Replace the URL; store the secret in Vault first:
+-- select vault.create_secret('<CRON_SECRET>', 'jobhunt_cron_secret');
+select cron.schedule(
+  'jobhunt-discovery-tick',
+  '*/15 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://<your-app>/api/internal/cron/discovery',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets
+                                      where name = 'jobhunt_cron_secret')
+    )
+  );
+  $$
+);
+-- Remove: select cron.unschedule('jobhunt-discovery-tick');
+```
+
+pg_cron cannot reach `localhost`; on a local machine use `npm run scheduler`.

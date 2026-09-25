@@ -50,6 +50,12 @@ export const serverEnvSchema = z.object({
   OLLAMA_MODEL: z.string().min(1).default("llama3.1:8b"),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
 
+  // Scheduled discovery (Phase 2 CP14). Shared secret for the internal cron endpoint;
+  // unset = the endpoint is disabled. Generate 32+ random bytes; never NEXT_PUBLIC_.
+  CRON_SECRET: optionalString.pipe(z.string().min(32).optional()),
+  /** Due profiles started per cron invocation (runs execute one after another). */
+  CRON_MAX_PROFILES: z.coerce.number().int().min(1).max(20).default(5),
+
   // Upload limits
   MAX_UPLOAD_BYTES: z.coerce
     .number()

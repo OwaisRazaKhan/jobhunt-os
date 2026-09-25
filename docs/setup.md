@@ -91,6 +91,13 @@ Open http://localhost:3000, create an account, and choose **Import CV** or **Bui
 
 For demos or offline work, `npm run db:local` starts a local Postgres (PGlite) on port 54329 and applies the same migrations, RLS included. Set `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/postgres` and `DATABASE_POOL_MAX=1`, and leave the Supabase variables empty. Files then go to `.data/storage`, which only works when `APP_ENV=development`. This mode is not for production.
 
+## Scheduled discovery (optional)
+
+Set `CRON_SECRET` in `.env` (32+ random bytes, same generator as above), restart the app, then run
+`npm run scheduler` in a second terminal. Search Profiles with an automatic-run interval are
+discovered when due. Details and the optional Supabase pg_cron setup:
+[job-discovery.md §8](./job-discovery.md#8-scheduling-cp14-free).
+
 ## Maintenance
 
 - `npm run maintenance:purge`: hard-deletes facts that were soft-deleted more than 30 days ago. Schedule it with any free cron, for example GitHub Actions.

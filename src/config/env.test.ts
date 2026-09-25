@@ -26,6 +26,13 @@ describe("parseServerEnv", () => {
     );
   });
 
+  it("CRON_SECRET is optional but must be long when set", () => {
+    expect(parseServerEnv({}).CRON_SECRET).toBeUndefined();
+    expect(parseServerEnv({}).CRON_MAX_PROFILES).toBe(5);
+    expect(() => parseServerEnv({ CRON_SECRET: "too-short" })).toThrow(/CRON_SECRET/);
+    expect(parseServerEnv({ CRON_SECRET: "x".repeat(32) }).CRON_SECRET).toHaveLength(32);
+  });
+
   it("rejects a short BETTER_AUTH_SECRET", () => {
     expect(() => parseServerEnv({ BETTER_AUTH_SECRET: "short" })).toThrow(/BETTER_AUTH_SECRET/);
   });

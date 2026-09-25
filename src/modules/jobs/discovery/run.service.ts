@@ -809,3 +809,32 @@ export async function getSourceHistory(actor: ActorRef, sourceId: string, take =
   });
   return { source, runs, health };
 }
+
+/** Records a scheduled run that could not start (e.g. no boards), so the user can see why. */
+export async function recordSkippedScheduledRun(
+  actor: ActorRef,
+  profileId: string,
+  reason: string,
+) {
+  return withUserContext(actor.userId, async (t) => {
+    const profile = await t.searchProfile.findFirst({
+      where: { id: profileId, userId: actor.userId },
+      select: { id: true, name: true },
+    });
+    if (!profile) return null;
+    const now = new Date();
+    return t.discoveryRun.create({
+      data: {
+        userId: actor.userId,
+        profileId: profile.id,
+        trigger: "SCHEDULED",
+        status: "CANCELLED",
+        stage: "DONE",
+        criteria: { profileName: profile.name },
+        message: `Scheduled run skipped: ${reason}`.slice(0, 1000),
+        startedAt: now,
+        finishedAt: now,
+      },
+    });
+  });
+}
