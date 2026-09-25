@@ -10,14 +10,18 @@ export function NavLink({
   children,
   exact,
   badge,
+  exclude = [],
 }: {
   href: string;
   children: ReactNode;
   exact?: boolean;
   badge?: number;
+  /** Sub-paths that have their own nav entry */
+  exclude?: string[];
 }) {
   const pathname = usePathname();
-  const active = exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+  const within = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  const active = exact ? pathname === href : within(href) && !exclude.some((path) => within(path));
   return (
     <Link
       href={href}

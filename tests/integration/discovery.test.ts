@@ -12,7 +12,16 @@ import {
   setSourceEnabled,
   updateSourceConfiguration,
 } from "@/modules/jobs/sources.service";
-import { addTerm, listCategories, listLocations } from "@/modules/search-profiles/config.service";
+import {
+  addCategory,
+  addLocation,
+  addTerm,
+  deleteCategory,
+  deleteLocation,
+  deleteTerm,
+  listCategories,
+  listLocations,
+} from "@/modules/search-profiles/config.service";
 import {
   createSearchProfile,
   deleteSearchProfile,
@@ -88,6 +97,49 @@ describe("seeded configuration", () => {
         .find((c) => c.id === ids.ai)!
         .terms.some((t) => t.term === "Automation Analyst"),
     ).toBe(false);
+  });
+});
+
+describe("search configuration management (locations, categories, terms)", () => {
+  it("adds and removes own locations; system locations are read-only; others never see them", async () => {
+    const kochi = await addLocation(userA, {
+      countryCode: "IN",
+      name: "Kochi",
+      kind: "CITY",
+      aliases: "Cochin\ncochin",
+    });
+    expect(kochi.aliases).toEqual(["cochin"]);
+    expect((await listLocations(userA)).find((l) => l.id === kochi.id)?.own).toBe(true);
+    expect((await listLocations(userB)).some((l) => l.id === kochi.id)).toBe(false);
+    await expect(
+      addLocation(userA, { countryCode: "ZZ", name: "Nowhere", aliases: "" }),
+    ).rejects.toBeTruthy();
+    await expect(deleteLocation(userA, ids.bengaluru)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    await expect(deleteLocation(userB, kochi.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await deleteLocation(userA, kochi.id);
+    expect((await listLocations(userA)).some((l) => l.id === kochi.id)).toBe(false);
+  });
+
+  it("custom categories with terms; duplicate terms rejected; system terms protected", async () => {
+    const growth = await addCategory(userA, { name: "Growth", description: "" });
+    expect(growth.key).toBe("my-growth");
+    const term = await addTerm(userA, { categoryId: growth.id, term: "Growth Associate" });
+    await expect(
+      addTerm(userA, { categoryId: growth.id, term: "growth associate" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(addTerm(userB, { categoryId: growth.id, term: "x" })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    const systemTerm = (await listCategories(userA))
+      .find((c) => c.id === ids.ai)!
+      .terms.find((t) => !t.own)!;
+    await expect(deleteTerm(userA, systemTerm.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(deleteCategory(userA, ids.ai)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await deleteTerm(userA, term.id);
+    await deleteCategory(userA, growth.id);
+    expect((await listCategories(userA)).some((c) => c.id === growth.id)).toBe(false);
   });
 });
 

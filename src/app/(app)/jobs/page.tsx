@@ -1,4 +1,4 @@
-import { Briefcase, Plug, Plus } from "lucide-react";
+import { Briefcase, Plug, Plus, Radar } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { buttonClass } from "@/components/ui/button";
@@ -22,6 +22,9 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
         description="Jobs discovered from legitimate sources or added by you. Every job keeps its source attribution; unknown details stay unknown."
         actions={
           <>
+            <Link href="/jobs/profiles" className={buttonClass("secondary", "sm")}>
+              <Radar className="size-3.5" aria-hidden /> Search profiles
+            </Link>
             <Link href="/jobs/sources" className={buttonClass("secondary", "sm")}>
               <Plug className="size-3.5" aria-hidden /> Sources
             </Link>

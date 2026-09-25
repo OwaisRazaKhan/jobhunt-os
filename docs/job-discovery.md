@@ -72,3 +72,14 @@ closes when none of its postings remain; it reopens if it reappears.
 Categories: system rule classification (`user_id NULL`) at ingestion; the user's own terms
 and custom categories produce user-scoped assignments during their runs. AI classification
 (optional, later) must set `method = AI` and `model`, and never overwrites the job.
+
+## 7. User interface
+
+| Route                              | Purpose                                                                                                                                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/jobs/profiles`                   | List Search Profiles with their configuration, linked-job count, last/next run; enable/disable, edit, duplicate (disabled copy), delete.                                                                             |
+| `/jobs/profiles/new`, `/[id]/edit` | Profile form. Every option is read from the DB (`loadProfileFormOptions`): target markets + any country, locations of the selected countries, categories with term counts, the user's ATS sources with board counts. |
+| `/jobs/profiles/configuration`     | Locations per country (add own, remove own), categories (add/remove custom) and search terms (add to any category, remove own). System rows are read-only.                                                           |
+
+Server Actions live in `src/app/(app)/jobs/profiles/actions.ts` (thin: auth → service). Deleting a profile
+removes its hits only; canonical jobs and run history are kept.

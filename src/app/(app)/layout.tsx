@@ -4,6 +4,8 @@ import {
   FileSearch,
   FileText,
   ListChecks,
+  Plug,
+  Radar,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -60,8 +62,14 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             Discovery
           </p>
-          <NavLink href="/jobs">
+          <NavLink href="/jobs" exclude={["/jobs/profiles", "/jobs/sources"]}>
             <Briefcase className="size-4" aria-hidden /> Jobs
+          </NavLink>
+          <NavLink href="/jobs/profiles">
+            <Radar className="size-4" aria-hidden /> Search profiles
+          </NavLink>
+          <NavLink href="/jobs/sources">
+            <Plug className="size-4" aria-hidden /> Sources
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System
