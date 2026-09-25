@@ -20,6 +20,7 @@ import {
   type AtsSourceKey,
   type BoardEntry,
 } from "../sources.schemas";
+import { computeSourceHealth, HEALTH_WINDOW, type SourceHealth } from "../source-health";
 import { ADAPTERS } from "./adapters";
 import { canonicalJobSchema, type CanonicalJob } from "./canonical";
 import { SourceFetchError } from "./http";
@@ -762,4 +763,49 @@ export async function testSource(actor: ActorRef, sourceId: string) {
     });
   });
   return results;
+}
+
+/** Health per source from its latest sync/test runs (one query, grouped in memory). */
+export async function listSourceHealth(
+  actor: ActorRef,
+  sources: { id: string; enabled: boolean; sourceKey: string }[],
+): Promise<Map<string, SourceHealth>> {
+  const runsBySource = await withUserContext(actor.userId, async (t) => {
+    const out = new Map<string, { status: string; startedAt: Date }[]>();
+    for (const s of sources) {
+      out.set(
+        s.id,
+        await t.sourceSyncRun.findMany({
+          where: { userId: actor.userId, sourceId: s.id },
+          select: { status: true, startedAt: true },
+          orderBy: { startedAt: "desc" },
+          take: HEALTH_WINDOW,
+        }),
+      );
+    }
+    return out;
+  });
+  return new Map(
+    sources.map((s) => [
+      s.id,
+      computeSourceHealth(runsBySource.get(s.id) ?? [], {
+        enabled: s.enabled,
+        manual: s.sourceKey === "MANUAL",
+      }),
+    ]),
+  );
+}
+
+/** One source with its sync/test history and health (owner only). */
+export async function getSourceHistory(actor: ActorRef, sourceId: string, take = 100) {
+  const source = await withUserContext(actor.userId, (t) =>
+    t.jobSource.findFirst({ where: { id: sourceId, userId: actor.userId } }),
+  );
+  if (!source) throw new AppError("NOT_FOUND");
+  const runs = await listSyncRuns(actor, { sourceId, take });
+  const health = computeSourceHealth(runs, {
+    enabled: source.enabled,
+    manual: source.sourceKey === "MANUAL",
+  });
+  return { source, runs, health };
 }

@@ -17,10 +17,13 @@ import {
 } from "@/modules/jobs/sources.schemas";
 import { jobCountsBySource } from "@/modules/jobs/jobs.service";
 import { listSources } from "@/modules/jobs/sources.service";
+import { listSourceHealth } from "@/modules/jobs/discovery/run.service";
+import { HealthBadge } from "@/modules/jobs/ui/health-badge";
 import {
   ConfigureSourceButton,
-  LaterActions,
   SourceEnabledToggle,
+  SourceHistoryLink,
+  TestSourceButton,
 } from "@/modules/jobs/ui/source-controls";
 import { requireActorOrRedirect } from "@/server/session";
 
@@ -55,10 +58,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export default async function SourcesPage() {
   const actor = await requireActorOrRedirect();
   const sources = await listSources(actor);
-  const counts = await jobCountsBySource(
-    actor,
-    sources.map((s) => s.id),
-  );
+  const [counts, health] = await Promise.all([
+    jobCountsBySource(
+      actor,
+      sources.map((s) => s.id),
+    ),
+    listSourceHealth(actor, sources),
+  ]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -73,8 +79,9 @@ export default async function SourcesPage() {
       <Alert tone="info" title="How source status works">
         For Ashby, Lever and Greenhouse we reviewed each provider&apos;s official public
         documentation (linked below). A source stays <strong>Pending verification</strong> until a
-        live test of the boards you configured succeeds. &ldquo;Public access documented&rdquo; is
-        not a legal agreement with the provider.
+        live test or sync of the boards you configured succeeds. Health is computed from the
+        recorded test and sync history only. &ldquo;Public access documented&rdquo; is not a legal
+        agreement with the provider.
       </Alert>
 
       <ul className="flex flex-col gap-3">
@@ -85,6 +92,7 @@ export default async function SourcesPage() {
           const verification = SOURCE_DEFINITIONS[key].verification;
           const status = source.status as SourceStatus;
           const terms = source.termsStatus as TermsStatus;
+          const h = health.get(source.id);
           return (
             <li key={source.id}>
               <Card>
@@ -146,6 +154,11 @@ export default async function SourcesPage() {
                       <span className="font-mono">{counts.get(source.id) ?? 0}</span>
                     </Field>
                     <Field label="Last test">{when(source.lastTestedAt)}</Field>
+                    {h && key !== "MANUAL" && (
+                      <Field label="Health (last 20 runs)">
+                        <HealthBadge health={h} />
+                      </Field>
+                    )}
                     <Field label="Last error">
                       {source.lastError ? (
                         <span className="text-danger">{source.lastError}</span>
@@ -168,7 +181,16 @@ export default async function SourcesPage() {
                         rateLimitSettings={source.rateLimitSettings as Record<string, unknown>}
                         notes={source.notes}
                       />
-                      <LaterActions isManual={key === "MANUAL"} />
+                      {key !== "MANUAL" && (
+                        <>
+                          <TestSourceButton
+                            id={source.id}
+                            name={source.sourceName}
+                            configured={boards.length > 0}
+                          />
+                          <SourceHistoryLink id={source.id} name={source.sourceName} />
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

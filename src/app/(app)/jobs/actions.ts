@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ActionState } from "@/lib/action-state";
 import { formDataToObject } from "@/lib/form-data";
 import { createManualJob, deleteManualJob, updateManualJob } from "@/modules/jobs/jobs.service";
+import { testSource } from "@/modules/jobs/discovery/run.service";
 import { setSourceEnabled, updateSourceConfiguration } from "@/modules/jobs/sources.service";
 import { runAction } from "@/server/action";
 import { requireActor } from "@/server/session";
@@ -40,6 +41,25 @@ export async function toggleSourceAction(
     await setSourceEnabled(actor, idSchema.parse(formData.get("_id")), enabled);
     revalidatePath("/jobs", "layout");
     return { message: enabled ? "Source enabled." : "Source disabled." };
+  });
+}
+
+/** Live test of up to 3 configured boards (fetch + validate only, no catalog writes). */
+export async function testSourceAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireActor();
+    const results = await testSource(actor, idSchema.parse(formData.get("_id")));
+    revalidatePath("/jobs", "layout");
+    const failed = results.filter((r) => !r.ok).length;
+    return {
+      message: failed
+        ? `${failed} of ${results.length} boards failed.`
+        : `All ${results.length} boards responded.`,
+      data: { results },
+    };
   });
 }
 

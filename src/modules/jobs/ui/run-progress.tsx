@@ -66,15 +66,25 @@ function StageSteps({ stage, status }: { stage: string; status: string }) {
   );
 }
 
-export function SyncRunsTable({ rows }: { rows: SyncRunView[] }) {
+/** `history` adds start time, run kind (sync/test) and request count columns. */
+export function SyncRunsTable({
+  rows,
+  history = false,
+}: {
+  rows: SyncRunView[];
+  history?: boolean;
+}) {
   if (rows.length === 0) return null;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] text-xs tabular-nums">
         <thead className="text-fg-subtle text-left font-mono text-[10px] uppercase">
           <tr className="border-border border-b">
+            {history && <th className="px-3 py-1.5 font-normal">Started (UTC)</th>}
+            {history && <th className="px-3 py-1.5 font-normal">Kind</th>}
             <th className="px-3 py-1.5 font-normal">Board</th>
             <th className="px-3 py-1.5 font-normal">Status</th>
+            {history && <th className="px-3 py-1.5 text-right font-normal">Requests</th>}
             <th className="px-3 py-1.5 text-right font-normal">Fetched</th>
             <th className="px-3 py-1.5 text-right font-normal">Valid</th>
             <th className="px-3 py-1.5 text-right font-normal">New</th>
@@ -87,6 +97,14 @@ export function SyncRunsTable({ rows }: { rows: SyncRunView[] }) {
         <tbody className="divide-border divide-y">
           {rows.map((r) => (
             <tr key={r.id} className="align-top">
+              {history && (
+                <td className="px-3 py-1.5 font-mono whitespace-nowrap">
+                  {r.startedAt.slice(0, 16).replace("T", " ")}
+                </td>
+              )}
+              {history && (
+                <td className="text-fg-muted px-3 py-1.5">{r.kind === "TEST" ? "test" : "sync"}</td>
+              )}
               <td className="px-3 py-1.5">
                 <span className="text-fg-subtle font-mono">{r.sourceKey}</span>{" "}
                 <span className="font-mono">{r.board}</span>
@@ -100,6 +118,7 @@ export function SyncRunsTable({ rows }: { rows: SyncRunView[] }) {
               <td className="px-3 py-1.5">
                 <RunStatusBadge status={r.status} />
               </td>
+              {history && <td className="px-3 py-1.5 text-right">{r.requests}</td>}
               <td className="px-3 py-1.5 text-right">{r.fetched}</td>
               <td className="px-3 py-1.5 text-right">{r.valid}</td>
               <td className="px-3 py-1.5 text-right">{r.created}</td>

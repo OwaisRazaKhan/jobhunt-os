@@ -3,15 +3,18 @@
 import { FlaskConical, History, Settings2 } from "lucide-react";
 import { useActionState, useState } from "react";
 import { ActionForm } from "@/components/forms/action-form";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonClass } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { INITIAL_ACTION_STATE } from "@/lib/action-state";
 import { cn } from "@/lib/cn";
-import { saveSourceConfigAction, toggleSourceAction } from "@/app/(app)/jobs/actions";
+import {
+  saveSourceConfigAction,
+  testSourceAction,
+  toggleSourceAction,
+} from "@/app/(app)/jobs/actions";
 import type { FieldDef } from "@/modules/candidate/form-fields";
 import { SOURCE_DEFINITIONS, type SourceKey } from "../sources.schemas";
-
-const LATER = "Available after connector setup.";
 
 function configFields(key: SourceKey): FieldDef[] {
   const def = SOURCE_DEFINITIONS[key];
@@ -133,7 +136,7 @@ export function ConfigureSourceButton({
         description={
           sourceKey === "MANUAL"
             ? "Manual Entry needs no external configuration."
-            : "Saved settings are used once the connector is available. No request is sent to the source now."
+            : "Saving does not contact the provider. Use Test to check your boards live."
         }
         wide
       >
@@ -192,23 +195,90 @@ export function SourceEnabledToggle({
   );
 }
 
-/** Actions that belong to later checkpoints: visibly disabled, never faked. */
-export function LaterActions({ isManual }: { isManual: boolean }) {
-  if (isManual) return null;
+interface TestResult {
+  board: string;
+  ok: boolean;
+  fetched: number;
+  valid: number;
+  message: string;
+}
+
+/** Runs a live test (max 3 boards) and shows the per-board outcome. */
+export function TestSourceButton({
+  id,
+  name,
+  configured,
+}: {
+  id: string;
+  name: string;
+  configured: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState(testSourceAction, INITIAL_ACTION_STATE);
+  const results = (state.data?.results ?? []) as TestResult[];
   return (
     <>
-      <Button size="sm" variant="ghost" disabled title={LATER} aria-label={`Test — ${LATER}`}>
-        <FlaskConical className="size-3.5" aria-hidden /> Test
-      </Button>
       <Button
         size="sm"
         variant="ghost"
-        disabled
-        title={LATER}
-        aria-label={`View history — ${LATER}`}
+        onClick={() => setOpen(true)}
+        disabled={!configured}
+        title={configured ? undefined : "Add at least one board first"}
+        aria-label={`Test ${name}`}
       >
-        <History className="size-3.5" aria-hidden /> History
+        <FlaskConical className="size-3.5" aria-hidden /> Test
       </Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`Test ${name}`}
+        description="Fetches up to 3 of your configured boards from the provider's public API and validates the postings. Nothing is saved to the job catalog; the result is recorded in the source history."
+      >
+        <form action={action} className="flex flex-col gap-3">
+          <input type="hidden" name="_id" value={id} />
+          {state.error && (
+            <p role="alert" className="text-danger text-sm">
+              {state.error}
+            </p>
+          )}
+          {state.ok && (
+            <div role="status" className="flex flex-col gap-1.5">
+              <p className="text-fg text-sm">{state.message}</p>
+              <ul className="divide-border border-border divide-y rounded-md border">
+                {results.map((r) => (
+                  <li key={r.board} className="flex items-start gap-2 px-3 py-2 text-xs">
+                    <span className={r.ok ? "text-success" : "text-danger"}>
+                      {r.ok ? "OK" : "FAILED"}
+                    </span>
+                    <span className="font-mono">{r.board}</span>
+                    <span className="text-fg-muted ml-auto text-right">{r.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+            <Button type="submit" variant="primary" disabled={pending}>
+              {pending ? "Testing…" : state.ok ? "Test again" : "Run test"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </>
+  );
+}
+
+export function SourceHistoryLink({ id, name }: { id: string; name: string }) {
+  return (
+    <Link
+      href={`/jobs/sources/${id}`}
+      className={buttonClass("ghost", "sm")}
+      aria-label={`View ${name} history`}
+    >
+      <History className="size-3.5" aria-hidden /> History
+    </Link>
   );
 }

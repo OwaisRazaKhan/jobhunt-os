@@ -91,5 +91,13 @@ Running discovery (CP12):
   The page polls every 1.5 s until the status is terminal (SUCCEEDED / PARTIAL / FAILED / CANCELLED).
 - An active run (any profile) is resumed on page load; only one active run per user.
 
+| `/jobs/sources` | Per source: status, terms review, boards, last sync/success/test/error, jobs discovered, **health**, Configure, **Test** (live, max 3 boards, no catalog writes) and **History**. |
+| `/jobs/sources/[id]` | Source history: every TEST and SYNC run (`source_sync_runs`) newest first — time, kind, board, status, requests, counts, duration, error — plus the health summary. |
+
+Source health (`src/modules/jobs/source-health.ts`, pure + unit-tested) is computed from the latest 20
+finished runs of the source: no runs → `UNTESTED` (or `DISABLED`), latest 3 failed in a row →
+`FAILING`, any failure in the window → `DEGRADED`, otherwise `HEALTHY`. Manual Entry is
+`NOT_APPLICABLE`. Nothing is inferred beyond the recorded runs.
+
 Server Actions live in `src/app/(app)/jobs/profiles/actions.ts` (thin: auth → service). Deleting a profile
 removes its hits only; canonical jobs and run history are kept.
