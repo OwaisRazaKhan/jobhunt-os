@@ -1,0 +1,14 @@
+.next
+out
+build
+coverage
+node_modules
+package-lock.json
+next-env.d.ts
+src/generated
+
+# Vendor-managed agent tooling (installed by `npx skills` / `claude mcp`)
+.agents
+.claude
+.mcp.json
+skills-lock.json
