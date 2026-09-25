@@ -81,5 +81,15 @@ and custom categories produce user-scoped assignments during their runs. AI clas
 | `/jobs/profiles/new`, `/[id]/edit` | Profile form. Every option is read from the DB (`loadProfileFormOptions`): target markets + any country, locations of the selected countries, categories with term counts, the user's ATS sources with board counts. |
 | `/jobs/profiles/configuration`     | Locations per country (add own, remove own), categories (add/remove custom) and search terms (add to any category, remove own). System rows are read-only.                                                           |
 
+| `/jobs/discovery` | Pick a profile, see its full configuration, category terms and the exact boards a run will fetch (`previewDiscovery`), start a run and watch real progress; recent runs with per-run details (`?run=`). |
+
+Running discovery (CP12):
+
+- `POST /api/v1/discovery/runs` `{ profileId }` (JSON only) → `startDiscovery` creates a QUEUED run and
+  `after(() => executeDiscoveryRun(...))` executes it once the response is sent (`maxDuration = 300`).
+- `GET /api/v1/discovery/runs/:id` → `toDiscoveryRunView` (counters, stage, per-board sync rows; no payloads).
+  The page polls every 1.5 s until the status is terminal (SUCCEEDED / PARTIAL / FAILED / CANCELLED).
+- An active run (any profile) is resumed on page load; only one active run per user.
+
 Server Actions live in `src/app/(app)/jobs/profiles/actions.ts` (thin: auth → service). Deleting a profile
 removes its hits only; canonical jobs and run history are kept.

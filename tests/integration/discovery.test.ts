@@ -4,9 +4,12 @@ import { canonicalJobSchema, type CanonicalJob } from "@/modules/jobs/discovery/
 import { ingestBoard } from "@/modules/jobs/discovery/ingest";
 import {
   executeDiscoveryRun,
+  getActiveDiscoveryRun,
   getDiscoveryRun,
+  previewDiscovery,
   startDiscovery,
 } from "@/modules/jobs/discovery/run.service";
+import { toDiscoveryRunView } from "@/modules/jobs/discovery/run-view";
 import {
   getSourceByKey,
   setSourceEnabled,
@@ -480,9 +483,25 @@ describe("search profile → discovery run → job relationship", () => {
         sourceKeys: ["ASHBY"],
       });
 
+      expect(await previewDiscovery(userA, ai.id)).toEqual({
+        boards: [
+          { sourceKey: "ASHBY", sourceName: "Ashby", board: "indiatest", name: "India Test Co" },
+        ],
+        unavailableSources: [],
+      });
+      await expect(previewDiscovery(userB, ai.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+
       const run1 = await startDiscovery(userA, ai.id);
       await expect(startDiscovery(userA, blr.id)).rejects.toMatchObject({ code: "CONFLICT" });
+      expect((await getActiveDiscoveryRun(userA))?.id).toBe(run1.id);
+      expect(await getActiveDiscoveryRun(userB)).toBeNull();
+      expect(toDiscoveryRunView(run1)).toMatchObject({
+        status: "QUEUED",
+        terminal: false,
+        profileName: "India — AI Remote/Hybrid",
+      });
       await executeDiscoveryRun(userA, run1.id);
+      expect(await getActiveDiscoveryRun(userA)).toBeNull();
       const done1 = await getDiscoveryRun(userA, run1.id);
       expect(done1).toMatchObject({
         status: "SUCCEEDED",
@@ -500,6 +519,10 @@ describe("search profile → discovery run → job relationship", () => {
         board: "indiatest",
         created: 4,
       });
+      const view = toDiscoveryRunView(done1);
+      expect(view).toMatchObject({ terminal: true, counts: { fetched: 4, matched: 1 } });
+      expect(view.syncRuns[0]).toMatchObject({ board: "indiatest", status: "SUCCEEDED" });
+      await expect(getDiscoveryRun(userB, run1.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
 
       for (const profile of [blr, uae]) {
         const run = await startDiscovery(userA, profile.id);

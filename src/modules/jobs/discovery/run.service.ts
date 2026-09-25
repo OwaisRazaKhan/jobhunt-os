@@ -89,6 +89,44 @@ async function failStaleRuns(t: Tx, actor: ActorRef) {
   });
 }
 
+export interface DiscoveryPreview {
+  boards: { sourceKey: AtsSourceKey; sourceName: string; board: string; name: string | null }[];
+  /** Selected source keys that cannot contribute (disabled / no boards) */
+  unavailableSources: string[];
+}
+
+/** What a run of this profile would fetch right now (no network, no writes). */
+export async function previewDiscovery(
+  actor: ActorRef,
+  profileId: string,
+): Promise<DiscoveryPreview> {
+  return withUserContext(actor.userId, async (t) => {
+    const profile = await getSearchProfile(actor, profileId, t);
+    const boards = await planBoards(t, actor, profile.sourceKeys);
+    const contributing = new Set(boards.map((b) => b.sourceKey));
+    return {
+      boards: boards.map((b) => ({
+        sourceKey: b.sourceKey,
+        sourceName: b.sourceName,
+        board: b.board.id,
+        name: b.board.name ?? null,
+      })),
+      unavailableSources: profile.sourceKeys.filter((k) => !contributing.has(k as AtsSourceKey)),
+    };
+  });
+}
+
+/** The user's QUEUED/RUNNING run, if any (stale runs are failed first). */
+export async function getActiveDiscoveryRun(actor: ActorRef) {
+  return withUserContext(actor.userId, async (t) => {
+    await failStaleRuns(t, actor);
+    return t.discoveryRun.findFirst({
+      where: { userId: actor.userId, status: { in: ["QUEUED", "RUNNING"] } },
+      orderBy: { createdAt: "desc" },
+    });
+  });
+}
+
 /** Creates a QUEUED run for an owned, enabled profile. Execution is started by the caller. */
 export async function startDiscovery(
   actor: ActorRef,

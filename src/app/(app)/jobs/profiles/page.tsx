@@ -84,6 +84,14 @@ export default async function SearchProfilesPage({ searchParams }: PageProps<"/j
                   <div className="border-border flex flex-wrap items-center gap-2 border-t pt-3">
                     <ProfileEnabledToggle id={p.id} name={p.name} enabled={p.enabled} />
                     <div className="ml-auto flex flex-wrap items-start gap-1.5">
+                      {p.enabled && (
+                        <Link
+                          href={`/jobs/discovery?profile=${p.id}`}
+                          className={buttonClass("secondary", "sm")}
+                        >
+                          <Radar className="size-3.5" aria-hidden /> Run
+                        </Link>
+                      )}
                       <Link
                         href={`/jobs/profiles/${p.id}/edit`}
                         className={buttonClass("ghost", "sm")}

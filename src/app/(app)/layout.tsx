@@ -4,6 +4,7 @@ import {
   FileSearch,
   FileText,
   ListChecks,
+  Play,
   Plug,
   Radar,
   Settings,
@@ -62,11 +63,14 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             Discovery
           </p>
-          <NavLink href="/jobs" exclude={["/jobs/profiles", "/jobs/sources"]}>
+          <NavLink href="/jobs" exclude={["/jobs/profiles", "/jobs/sources", "/jobs/discovery"]}>
             <Briefcase className="size-4" aria-hidden /> Jobs
           </NavLink>
           <NavLink href="/jobs/profiles">
             <Radar className="size-4" aria-hidden /> Search profiles
+          </NavLink>
+          <NavLink href="/jobs/discovery">
+            <Play className="size-4" aria-hidden /> Discovery
           </NavLink>
           <NavLink href="/jobs/sources">
             <Plug className="size-4" aria-hidden /> Sources
