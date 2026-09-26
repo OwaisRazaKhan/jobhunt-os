@@ -28,6 +28,8 @@ import {
   type VersionStatus,
 } from "@/modules/communications/types";
 import { ApproveForm, GenerateForm, SettingsForm } from "@/modules/communications/ui/controls";
+import { ApplyRecipientForm } from "@/modules/communications/ui/package-controls";
+import { listRecipientContexts } from "@/modules/communications/recipient.service";
 import { CommunicationEditor } from "@/modules/communications/ui/editor";
 import { ago, SOURCE_TONES, STATUS_TONES } from "@/modules/communications/ui/labels";
 import {
@@ -63,10 +65,11 @@ export default async function CommunicationPage({
   const { communication: c, version, doc } = ws;
   if (!version || !doc) notFound();
   const kind = c.kind as "EMAIL" | "COVER_LETTER";
-  const [presets, ai, evidence] = await Promise.all([
+  const [presets, ai, evidence, recipients] = await Promise.all([
     listSignaturePresets(actor),
     getGenerationAvailability(actor, kind),
     claimEvidence(actor, version.id),
+    listRecipientContexts(actor, { companyId: c.companyId }),
   ]);
 
   const status = version.status as VersionStatus;
@@ -162,6 +165,14 @@ export default async function CommunicationPage({
                 className={buttonClass("secondary", "sm")}
               >
                 Compare with previous
+              </Link>
+            )}
+            {approvedHere && c.jobId && (
+              <Link
+                href={`/communication-packages/new?jobId=${c.jobId}&${kind === "EMAIL" ? "emailVersionId" : "coverLetterVersionId"}=${version.id}`}
+                className={buttonClass("primary", "sm")}
+              >
+                Add to communication package
               </Link>
             )}
             <InlineAction
@@ -326,10 +337,38 @@ export default async function CommunicationPage({
                     signaturePresetId: c.signaturePresetId,
                     userContext: c.userContext,
                   }}
+                  facts={[...evidence.facts.values()]
+                    .filter((f) => !f.ref.startsWith("resume:") && !f.ref.startsWith("profile:"))
+                    .map((f) => ({ value: f.ref, label: `${f.kind}: ${f.text.slice(0, 90)}` }))}
+                  strategy={
+                    c.strategy as {
+                      requestedAction?: string | null;
+                      primaryEvidence?: string[];
+                      secondaryEvidence?: string[];
+                      purpose?: string;
+                    }
+                  }
                 />
-                <p className="text-fg-subtle pt-2 text-[11px]">
+                <div className="border-border mt-3 border-t pt-3">
+                  <p className="text-fg-muted mb-1 text-xs font-medium">Saved recipient</p>
+                  <ApplyRecipientForm
+                    communicationId={c.id}
+                    current={c.recipientContextId}
+                    options={recipients.map((r) => ({
+                      value: r.id,
+                      label: `${r.name ?? r.email ?? r.title ?? r.company}${r.verificationStatus === "SOURCE_VERIFIED" ? " · source verified" : ""}`,
+                    }))}
+                  />
+                </div>
+                <p className="text-fg-subtle flex gap-3 pt-2 text-[11px]">
                   <Link href="/communications/signatures" className="underline">
-                    Manage signature presets
+                    Signature profiles
+                  </Link>
+                  <Link href="/communications/recipients" className="underline">
+                    Recipients
+                  </Link>
+                  <Link href="/communications/preferences" className="underline">
+                    Preferences
                   </Link>
                 </p>
               </div>

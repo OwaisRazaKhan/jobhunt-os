@@ -130,17 +130,31 @@ export function kindOf(type: CommunicationType): CommunicationKind {
 export function defaultGreeting(
   recipientName: string | null | undefined,
   recipientType: RecipientType,
+  preferredGreeting?: string | null,
 ): string {
+  const word = preferredGreeting?.trim().replace(/[,\s]+$/, "") || "Dear";
   const name = recipientName?.trim();
-  if (name) return `Dear ${name},`;
+  if (name) return `${word} ${name},`;
   switch (recipientType) {
     case "RECRUITER":
-      return "Dear Recruiter,";
+      return `${word} Recruiter,`;
     case "HIRING_MANAGER":
-      return "Dear Hiring Manager,";
+      return `${word} Hiring Manager,`;
     case "HR":
-      return "Dear HR Team,";
+      return `${word} HR Team,`;
     default:
-      return "Dear Hiring Team,";
+      return `${word} Hiring Team,`;
   }
 }
+
+/** Communication purpose (strategy) derived from the type. */
+export const PURPOSE_BY_TYPE: Record<CommunicationType, string> = {
+  APPLICATION_EMAIL: "APPLICATION",
+  RECRUITER_OUTREACH: "RECRUITER_OUTREACH",
+  HIRING_MANAGER_OUTREACH: "HIRING_MANAGER_OUTREACH",
+  GENERAL_HR_OUTREACH: "HR_OUTREACH",
+  NETWORKING_INTRODUCTION: "NETWORKING",
+  PORTFOLIO_INTRODUCTION: "PORTFOLIO",
+  CUSTOM_EMAIL: "CUSTOM",
+  COVER_LETTER: "APPLICATION",
+};

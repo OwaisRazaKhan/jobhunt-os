@@ -5,7 +5,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-26** — Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-26** — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -14,7 +14,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
 | Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
-| Migrations          | 13 in the repo, all applied on JOBHUNTOS (latest `20261020000000_phase7_communication_studio`)                                                                                  |
+| Migrations          | 14 in the repo, all applied on JOBHUNTOS (latest `20261025000000_phase7_communication_packages`)                                                                                |
 | Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
 | AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
@@ -30,19 +30,19 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 | 5     | Complete | SSRF-safe research fetcher with robots.txt, claims with evidence, company resolution, exports (`docs/research.md`)                                                 |
 | 6     | Built    | Resume Studio: versions + content hash, editor, tailoring + claim validation, Resume Check, approval, PDF/DOCX export (`docs/resume-studio.md`); awaiting approval |
 
-| 7 | Built | Communication Studio: emails + cover letters, AI drafting (`email.generate` / `cover_letter.generate`, Ollama by default), claim validation with provenance, quality engine, versions/compare/restore, approval gate, PDF/DOCX/TXT export, job + resume entry points (`docs/communication-studio.md`); no sending of any kind |
+| 7 | Built | Communication Studio: emails + cover letters, AI drafting (`email.generate` / `cover_letter.generate`, Ollama by default), claim validation with provenance, quality engine, versions/compare/restore, approval gate, PDF/DOCX/TXT export, job + resume entry points, **Communication Package + Phase 8 handoff** (`docs/communication-studio.md`); no sending of any kind |
 
 | AI | Complete | Provider registry, task registry + sensitivity, privacy routing, orchestrator (`runAiTask`) used by all 4 AI call sites, `/settings/ai`; real tests passed with `qwen3.5:9b` and `gemini-3.8-flash` |
 
 ## Database (JOBHUNTOS, verified live)
 
-- 73 tables (9 added by Phase 7), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- 78 tables (14 added by Phase 7: 9 studio + 5 package/recipient/preference), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
 - Supabase advisor lints (re-checked 2026-09-26 with read-only catalog queries — the Supabase MCP was not available in the session): security and performance findings **all resolved** by `20261015000000_advisor_fixes` (32 FK indexes, pinned trigger `search_path`, no multiple permissive policies); guarded by `tests/integration/advisors.test.ts`.
 - App role `jobhunt_app`: NOLOGIN, NOBYPASSRLS; every user-owned table has an owner policy
   `user_id = app_current_user_id()`. Shared catalog tables (jobs, companies, postings, requirement sets)
   follow job visibility. Better Auth tables have no app policies (owner client only).
 - 97 CHECK constraints. Functions: `app_current_user_id` (project), `rls_auto_enable` (Supabase platform
-  `ensure_rls` event trigger — compatible, not managed by this repo). Triggers: `resume_versions_protect_approved` and `communication_versions_protect_approved` (approved resume / communication content is immutable). Phase 7 advisors re-checked live after applying the migration: all clean. No `pg_cron`.
+  `ensure_rls` event trigger — compatible, not managed by this repo). Triggers: `resume_versions_protect_approved` and `communication_versions_protect_approved` (approved resume / communication content is immutable), `communication_packages_protect_frozen` and `communication_package_assets_guard` (a package that was ready for application never changes; asset hashes must match the referenced versions). Phase 7 advisors re-checked live after applying the migration: all clean. No `pg_cron`.
 - Storage: bucket `candidate-documents` — **private**, 10 MB limit, no public policies (server uses the
   service role and short-lived signed URLs).
 - Real data present (preserve it): 3 users, 1,721 jobs (all PUBLIC catalog), 1,721 source postings,
@@ -73,7 +73,7 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 
 | Command                               | Result                                                                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run check`                       | pass — typecheck, lint, format, **525 tests passed, 3 skipped** (41 files)                                                                |
+| `npm run check`                       | pass — typecheck, lint, format, **546 tests passed, 3 skipped** (43 files)                                                                |
 | `npm run build`                       | pass                                                                                                                                      |
 | `REAL_AI=1 npx vitest run tests/real` | passed on the local machine (Ollama `qwen3.5:9b`, Gemini `gemini-3.8-flash`); skipped where no `.env`/providers exist (e.g. Claude Cloud) |
 
@@ -99,13 +99,26 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
   (9,798 B), email v3 → TXT (961 B); all files verified by download (`matches_approval` true, user-scoped
   storage paths). Nothing was sent.
 
+## Phase 7 addition — Communication Package (2026-09-26)
+
+- Audit before building: package, readiness, stale detection, handoff, preferences were missing; recipient
+  context, provenance, strategy, asset relationships and context snapshot were partial; signature profiles
+  existed (reused, not duplicated). Details: `docs/communication-studio.md` §13.
+- Real package (owais, Sarvam): created from the job page via the UI — portal package with approved resume v1,
+  email v3, cover letter v2, current match, research v1 → every readiness check passed → confirmed →
+  `READY_FOR_APPLICATION`; `getCommunicationPackageForApplication` returned the exact versions, content hashes
+  and approval ids, integrity `VERIFIED`, `submitted: false`. No recipient email is known for this job, so no
+  email-channel package exists (nothing invented).
+- Stale behaviour is verified by automated tests (editing the approved email, revoking an approval,
+  recomputing the match → `STALE`; tampered hash → `INVALID`); it was not triggered on the real package.
+
 ## Known issues
 
 - **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and
   `format:check` failed on 137 files. `.gitattributes` now forces LF; no content changed.
 - Gemini may return temporary 503 "high demand"; shown as "busy, try again", never retried in a loop.
 - IPv6 outage on this network: see Environment (pooler in use).
-- Phase 7 limitations: `docs/communication-studio.md` §13 (lexical claim auditor, in-request generation).
+- Phase 7 limitations: `docs/communication-studio.md` §14 (lexical claim auditor, in-request generation).
 - The pg adapter logs a deprecation warning ("client.query() when the client is already executing a query");
   harmless, shown by the Next dev overlay as "1 issue".
 - Documented limitations: `docs/matching.md` and `docs/research.md` → "Known limitations"
@@ -113,4 +126,4 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 
 ## Next phase
 
-**Phase 8 — Application System** (after Phase 7 approval): applications, state machine, approvals, board/timeline, manual "I submitted" tracking. It consumes approved resume / cover letter / email versions and their content hashes (`docs/communication-studio.md` §10). No automated submission or sending.
+**Phase 8 — Application System** (after Phase 7 approval): applications, state machine, approvals, board/timeline, manual "I submitted" tracking. It consumes READY_FOR_APPLICATION communication packages via `getCommunicationPackageForApplication` (`docs/communication-studio.md` §13.6). No automated submission or sending.

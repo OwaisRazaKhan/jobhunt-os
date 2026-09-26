@@ -20,6 +20,7 @@ import {
   type SignatureFields,
 } from "./communication.service";
 import { loadEvidence } from "./context.service";
+import { getCommunicationPreferences } from "./recipient.service";
 import { parseCommunicationDocument, type CommunicationDocument } from "./document";
 import {
   aiCoverLetterOutputSchema,
@@ -35,6 +36,7 @@ import {
 } from "./generation";
 import {
   defaultGreeting,
+  PURPOSE_BY_TYPE,
   type CommunicationType,
   type Length,
   type RecipientType,
@@ -185,6 +187,9 @@ async function generate(actor: ActorRef, communicationId: string): Promise<Gener
     });
 
   const headDoc = parseCommunicationDocument(head.content);
+  const prefs = await getCommunicationPreferences(actor);
+  const strategy = (communication.strategy ?? {}) as Record<string, unknown>;
+  const evidenceRefs = new Set(evidence.corpus.facts.map((f) => f.ref));
   // Idempotency: identical settings + context + prompt → the existing generated draft.
   const fingerprint = sha256Hex(
     JSON.stringify([
@@ -205,6 +210,8 @@ async function generate(actor: ActorRef, communicationId: string): Promise<Gener
       // System-controlled parts carried from the head (not its AI-written body).
       headDoc.signature,
       headDoc.kind === "COVER_LETTER" ? headDoc.header : null,
+      prefs,
+      strategy,
     ]),
   );
   const existing = await withUserContext(actor.userId, (t) =>
@@ -246,6 +253,7 @@ async function generate(actor: ActorRef, communicationId: string): Promise<Gener
   const greeting = defaultGreeting(
     communication.recipientName,
     communication.recipientType as RecipientType,
+    prefs.preferredGreeting,
   );
   const signature =
     headDoc.signature.trim() || (await defaultSignatureFor(actor, communication.signaturePresetId));
@@ -296,6 +304,17 @@ async function generate(actor: ActorRef, communicationId: string): Promise<Gener
     },
     greeting,
     resumeAssociated: Boolean(communication.resumeVersionId),
+    preferredClosing: prefs.preferredClosing,
+    avoidPhrases: prefs.avoidPhrases,
+    strategy: {
+      requestedAction: (strategy.requestedAction as string) ?? null,
+      primaryEvidence: ((strategy.primaryEvidence as string[]) ?? []).filter((r) =>
+        evidenceRefs.has(r),
+      ),
+      secondaryEvidence: ((strategy.secondaryEvidence as string[]) ?? []).filter((r) =>
+        evidenceRefs.has(r),
+      ),
+    },
   });
 
   const started = Date.now();
@@ -407,6 +426,15 @@ async function generate(actor: ActorRef, communicationId: string): Promise<Gener
           fingerprint,
           stats: draft.stats,
           researchVersion: evidence.research?.version ?? null,
+          strategy: {
+            purpose: PURPOSE_BY_TYPE[communication.communicationType as CommunicationType],
+            ...strategy,
+          },
+          preferences: {
+            greeting: prefs.preferredGreeting,
+            closing: prefs.preferredClosing,
+            avoidPhrases: prefs.avoidPhrases.length,
+          },
           requirementSetVersion: evidence.requirementSet?.version ?? null,
         },
       });

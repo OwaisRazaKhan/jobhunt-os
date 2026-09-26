@@ -225,6 +225,12 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
           >
             Write cover letter
           </Link>
+          <Link
+            href={`/communication-packages/new?jobId=${job.id}`}
+            className={buttonClass("ghost", "sm")}
+          >
+            Create communication package
+          </Link>
         </div>
         {canEdit && (
           <div className="flex gap-2">

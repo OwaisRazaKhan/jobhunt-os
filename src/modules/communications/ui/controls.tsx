@@ -476,11 +476,20 @@ export function SettingsForm({
   kind,
   values,
   signatures,
+  facts = [],
+  strategy = {},
 }: {
   communicationId: string;
   kind: "EMAIL" | "COVER_LETTER";
   values: Record<string, string | null>;
   signatures: Option[];
+  facts?: Option[];
+  strategy?: {
+    requestedAction?: string | null;
+    primaryEvidence?: string[];
+    secondaryEvidence?: string[];
+    purpose?: string;
+  };
 }) {
   const [state, action, pending] = useActionState(updateSettingsAction, INITIAL_ACTION_STATE);
   return (
@@ -497,6 +506,57 @@ export function SettingsForm({
         </Field>
         <RecipientFields values={values} />
         <StyleFields kind={kind} values={values} signatures={signatures} />
+        <fieldset className="border-border flex flex-col gap-2 rounded-md border p-2 text-xs">
+          <legend className="text-fg-muted px-1 font-medium">
+            Strategy
+            {strategy.purpose ? ` · ${strategy.purpose.toLowerCase().replace(/_/g, " ")}` : ""}
+          </legend>
+          <Field
+            label="What you ask for (optional)"
+            help="e.g. “a short call about the role”. Used as the closing request."
+          >
+            <input
+              name="requestedAction"
+              defaultValue={strategy.requestedAction ?? ""}
+              maxLength={300}
+              className={inputClass}
+            />
+          </Field>
+          <input type="hidden" name="__arrays" value="primaryEvidence,secondaryEvidence" />
+          {facts.length > 0 && (
+            <details>
+              <summary className="cursor-pointer">
+                Evidence to lead with ({(strategy.primaryEvidence ?? []).length} primary ·{" "}
+                {(strategy.secondaryEvidence ?? []).length} supporting)
+              </summary>
+              <ul className="mt-1 flex max-h-56 flex-col gap-1 overflow-y-auto">
+                {facts.map((f) => (
+                  <li key={f.value} className="flex items-start gap-2">
+                    <label className="flex items-center gap-1" title="Primary">
+                      <input
+                        type="checkbox"
+                        name="primaryEvidence[]"
+                        value={f.value}
+                        defaultChecked={strategy.primaryEvidence?.includes(f.value)}
+                      />{" "}
+                      P
+                    </label>
+                    <label className="flex items-center gap-1" title="Supporting">
+                      <input
+                        type="checkbox"
+                        name="secondaryEvidence[]"
+                        value={f.value}
+                        defaultChecked={strategy.secondaryEvidence?.includes(f.value)}
+                      />{" "}
+                      S
+                    </label>
+                    <span className="text-fg-muted">{f.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </fieldset>
       </div>
       <Feedback state={state} />
       <div className="flex justify-end">

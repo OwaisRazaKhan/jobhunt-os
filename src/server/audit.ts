@@ -129,6 +129,17 @@ export type AuditAction =
   | "communication_generation_failed"
   | "communication_imported"
   | "communication_duplicated"
+  | "recipient_context_saved"
+  | "recipient_context_deleted"
+  | "communication_preferences_saved"
+  | "communication_package_created"
+  | "communication_package_updated"
+  | "communication_package_checked"
+  | "communication_package_ready"
+  | "communication_package_stale"
+  | "communication_package_invalid"
+  | "communication_package_archived"
+  | "communication_package_handoff"
   | "signature_preset_saved"
   | "signature_preset_deleted";
 

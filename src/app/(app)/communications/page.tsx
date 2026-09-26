@@ -56,6 +56,15 @@ export default async function CommunicationsPage({ searchParams }: PageProps<"/c
             >
               New cover letter
             </Link>
+            <Link href="/communication-packages" className={buttonClass("secondary", "sm")}>
+              Packages
+            </Link>
+            <Link href="/communications/recipients" className={buttonClass("ghost", "sm")}>
+              Recipients
+            </Link>
+            <Link href="/communications/preferences" className={buttonClass("ghost", "sm")}>
+              Preferences
+            </Link>
             <Link href="/communications/signatures" className={buttonClass("ghost", "sm")}>
               Signatures
             </Link>

@@ -125,6 +125,15 @@ export interface PromptInput {
   recipient: { type: string; name: string | null; title: string | null };
   greeting: string;
   resumeAssociated: boolean;
+  /** Personalization preferences (user-editable) */
+  preferredClosing?: string | null;
+  avoidPhrases?: string[];
+  /** Communication strategy: what to ask for and which facts to lead with */
+  strategy?: {
+    requestedAction?: string | null;
+    primaryEvidence?: string[];
+    secondaryEvidence?: string[];
+  };
 }
 
 export function buildGenerationPrompt(input: PromptInput): { system: string; user: string } {
@@ -210,9 +219,25 @@ export function buildGenerationPrompt(input: PromptInput): { system: string; use
     input.resumeAssociated
       ? "A resume version is associated with this message (it is not attached by you)."
       : "No resume is associated.",
-    'End with a short closing line such as "Kind regards," in `closing`.',
+    input.strategy?.primaryEvidence?.length
+      ? `Lead with these facts (the candidate chose them): ${input.strategy.primaryEvidence.join(", ")}.`
+      : "",
+    input.strategy?.secondaryEvidence?.length
+      ? `Supporting facts if space allows: ${input.strategy.secondaryEvidence.join(", ")}.`
+      : "",
+    input.strategy?.requestedAction
+      ? `Requested action to close with (the candidate's words): ${sanitizeUntrusted(input.strategy.requestedAction, 300)}`
+      : "",
+    input.avoidPhrases?.length
+      ? `Never use these phrases: ${input.avoidPhrases.map((p) => `"${sanitizeUntrusted(p, 200)}"`).join(", ")}.`
+      : "",
+    input.preferredClosing
+      ? `Use exactly "${sanitizeUntrusted(input.preferredClosing, 60)}" as \`closing\`.`
+      : 'End with a short closing line such as "Kind regards," in `closing`.',
     "</task>",
-  ].join("\n");
+  ]
+    .filter((line, i, all) => line !== "" || all[i - 1] !== "")
+    .join("\n");
   return { system, user };
 }
 

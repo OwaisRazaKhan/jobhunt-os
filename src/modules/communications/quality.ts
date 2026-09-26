@@ -42,6 +42,8 @@ export interface QualityInput {
     resumeText?: string | null;
     /** Context the user typed (relationships stated there are not invented) */
     userContext?: string | null;
+    /** Phrases the candidate asked never to use (communication preferences) */
+    avoidPhrases?: string[];
   };
   claims: { location: string; text: string; claimKind: ClaimKind; status: ClaimStatus }[];
 }
@@ -392,6 +394,17 @@ export function runQualityChecks(input: QualityInput): QualityFinding[] {
       seen.set(k, i);
     }
   });
+
+  for (const phrase of context.avoidPhrases ?? []) {
+    if (phrase.trim() && text.toLowerCase().includes(phrase.trim().toLowerCase()))
+      add(
+        "WRITING",
+        "preference.avoided_phrase",
+        "WARNING",
+        `Uses a phrase you asked to avoid: “${phrase.trim().slice(0, 80)}”.`,
+        "Rephrase it (see Communication preferences).",
+      );
+  }
 
   // --- LENGTH -----------------------------------------------------------------------------
   const count = words(body.join(" "));

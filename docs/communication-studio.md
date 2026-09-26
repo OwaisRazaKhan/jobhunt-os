@@ -175,6 +175,8 @@ company/role mention, length outside the range for the chosen length.
 
 ## 10. Workflow contract (Phase 9; no visual node)
 
+The Phase 8 input is the Communication Package handoff (§13.6).
+
 `writeCommunication(actor, { jobId, resumeVersionId?, communicationType, recipientContext?, userContext?, options? })`
 → `{ communicationId, communicationVersionId, contentHash, qualityReport, approvalRequired: true }`.
 Phase 8 can read the approved resume version, approved cover letter and approved email with their hashes.
@@ -202,7 +204,139 @@ statement is backed by the posting; statements the auditor could not fully suppo
 (greeting/closing inside the body, intent sentences counted as claims, posting names flagged as unknown).
 Nothing was sent.
 
-## 13. Known limitations
+## 13. Communication Package — the Phase 7 → Phase 8 boundary
+
+Migration `20261025000000_phase7_communication_packages` · code `package.ts` (pure), `package.service.ts`,
+`recipient.service.ts` · routes `/communication-packages`, `/communication-packages/new`,
+`/communication-packages/[id]`, `/communications/recipients`, `/communications/preferences` ·
+API `GET /api/v1/communication-packages/[id]/handoff`.
+
+A package is the exact set of **approved** assets prepared for **one job**: resume version (always), an
+application email and/or a cover letter (optional, per package), a recipient context, and the context
+versions they were prepared against. It is the only clean handoff into Phase 8.
+
+**Ready for application means prepared and approved — not submitted.** The UI, the API
+(`submitted: false`) and the docs keep that distinction explicit. Nothing in Phase 7 sends or submits.
+
+### 13.1 Data model (all owner-only RLS, one policy per table, FK indexes)
+
+| Table                          | Purpose                                                                                                                                                                                                                                                     | App grants |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `communication_packages`       | Job, channel (`PORTAL` / `EMAIL`), included assets, status, **context snapshot** (match, requirement set, research, job content hash, candidate facts hash, recipient + strategy snapshots), integrity hash, stale reasons, lineage (`previous_package_id`) | S I U      |
+| `communication_package_assets` | **Asset manifest**: one row per asset type with the exact version id, its content hash, and the approval id recorded at readiness                                                                                                                           | S I U D    |
+| `communication_package_checks` | Every deterministic readiness check run (items + result + integrity hash)                                                                                                                                                                                   | S I        |
+| `recipient_contexts`           | Reusable recipients with provenance (source, source URL, verification, confidence, notes)                                                                                                                                                                   | S I U D    |
+| `communication_preferences`    | One row per user: greeting word, closing, default tone/length, phrases to avoid                                                                                                                                                                             | S I U D    |
+
+`communications` gained `recipient_context_id` (the saved recipient it mirrors) and `strategy` (jsonb).
+Signature profiles were **reused** (`signature_presets`; the default is `is_default`, not duplicated).
+
+Triggers (`search_path = ''`):
+
+- `communication_packages_protect_frozen` — once `READY_FOR_APPLICATION` (and when `STALE` / `INVALID` /
+  `ARCHIVED`) references, snapshots, integrity hash and ready time can never change; status only moves
+  forward (`READY → STALE | INVALID | ARCHIVED`, `STALE | INVALID → ARCHIVED`).
+- `communication_package_assets_guard` — asset rows of a frozen package cannot be added/changed/removed
+  (only the approval id recorded at the moment of readiness), and every asset hash must equal the
+  referenced version's content hash.
+
+### 13.2 Statuses
+
+| Status                  | Meaning                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `INCOMPLETE`            | A required asset/context is missing or not valid yet (e.g. not approved, critical finding)  |
+| `READY_FOR_REVIEW`      | Every check passes; the candidate has not confirmed the final review                        |
+| `READY_FOR_APPLICATION` | Confirmed; frozen; exact approval ids + integrity hash recorded                             |
+| `STALE`                 | A frozen package whose references are no longer current / approved (never silently updated) |
+| `INVALID`               | Integrity problem: hash mismatch, job gone, inconsistent references                         |
+| `ARCHIVED`              | Retained history                                                                            |
+
+### 13.3 Deterministic readiness check (no scores)
+
+Each item is PASS / FAIL / WARN / N/A with a reason: candidate profile with usable facts · job exists ·
+match exists (current) · requirements current · research (optional) · per asset: selected, **integrity**
+(content re-hashes to the stored and selected hash), **approved** (active approval for that exact hash),
+**current** (no newer approved version, not edited after approval), is for this job · per communication:
+claims validated (no unsupported statements), no critical findings, written for the packaged resume ·
+recipient (an `EMAIL` package needs a recipient email you know; `INVALID` / `STALE` recipients block;
+unverified is a warning) · recipient matches the email's recipient.
+
+Required assets: `PORTAL` → resume (+ email / cover letter if included); `EMAIL` → resume + email + recipient email.
+
+### 13.4 Stale detection
+
+Evaluated on every view / re-check / handoff; a frozen package moves to `STALE` (with reasons, audited)
+when: an asset's approval is revoked or changed · the approved version was **edited** (a `MANUAL_EDIT`
+child exists — editing an approved email or resume) · a **newer approved** version of the same resume /
+communication exists · the match or requirement set was recomputed · the research was superseded · the job
+posting changed · the recipient context changed or became invalid/stale. A newly generated draft elsewhere
+does **not** change the package. `INVALID` when an asset hash no longer matches or the job is gone.
+Updating = **Duplicate** (same versions) or **Create updated package** (latest approved versions) — a new
+package linked to the old one; the stale package is kept as history.
+
+### 13.5 Integrity
+
+`packageIntegrityHash` = SHA-256 over a canonical JSON of: job id + content hash, channel, included assets,
+match / requirement set / research ids, candidate facts hash, every asset `(type, version id, content hash)`,
+the recipient snapshot and the strategy snapshot. Reproducible (order-independent); it complements — never
+replaces — the per-asset content hashes. Stored when the package becomes ready and re-verified at handoff.
+
+### 13.6 Phase 8 handoff
+
+`getCommunicationPackageForApplication(actor, packageId)` re-runs the readiness/stale check, requires
+`READY_FOR_APPLICATION` and a matching integrity hash, and returns:
+`{ packageId, candidateId, jobId, channel, matchVersionId, requirementSetId, researchVersionId,
+candidateSnapshotHash, resume, email, coverLetter (each { versionId, contentHash, approvalStatus, approvalId }),
+recipientContext, strategy, readinessStatus, integrityStatus: "VERIFIED", integrityHash, readyAt, submitted: false }`.
+Unapproved / stale / tampered / incomplete packages, missing candidate or job, and other users' packages
+are rejected. Every handoff is audited.
+
+### 13.7 Recipient context & provenance
+
+Sources: `JOB_POST`, `OFFICIAL_COMPANY_PAGE`, `USER_PROVIDED`, `PUBLIC_PROFESSIONAL_SOURCE`,
+`PHASE_8_DISCOVERY` (reserved; not selectable in Phase 7), `UNKNOWN`. Verification: `SOURCE_VERIFIED`,
+`UNVERIFIED`, `INVALID`, `STALE`. `SOURCE_VERIFIED` requires a public source type **and** its link **and**
+the candidate's explicit confirmation (DB CHECK + service); changing the name/email/source resets it.
+Nothing is discovered, inferred or pattern-generated; greetings never use a name that wasn't entered.
+Applying a saved recipient to a communication fills its recipient fields and links it; editing those
+fields by hand unlinks it.
+
+### 13.8 Personalization & strategy
+
+- **Preferences** (`/communications/preferences`): greeting word ("Hi" → "Hi Priya," / "Hi Hiring Team,"),
+  closing, default tone and length, phrases to avoid, default signature profile. New drafts use them; AI
+  prompts include the closing and forbidden phrases; the quality check flags an avoided phrase
+  (`preference.avoided_phrase`, warning).
+- **Strategy** (communication settings): purpose (from the type), requested action, primary / supporting
+  evidence (fact references). Passed to AI generation, stored in the version's generation metadata and in
+  the package's strategy snapshot.
+
+### 13.9 Entry points
+
+Job detail → **Create communication package** · Resume Studio (approved version for a job) → **Create
+communication package** with that exact version · approved email / cover letter → **Add to communication
+package** with that exact version. Package detail actions: Re-check readiness, Mark ready for application
+(confirmation), Open resume / email / cover letter, Duplicate, Create updated package (when stale), Archive.
+No Send / Submit / Apply.
+
+### 13.10 Tests
+
+`package.unit.test.ts` (readiness items, required assets, stale/invalid transitions, forward-only statuses,
+integrity reproducibility, greeting preference) and `tests/integration/communication-packages.test.ts`
+(approved assets → ready → handoff with exact versions; persistence; frozen trigger; unapproved and missing
+assets; foreign-job email refused; email channel recipient rule; stale after editing the approved email,
+after a revoked approval and after a recomputed match; tampered hash → INVALID; asset hash guard; cross-user
+isolation incl. raw RLS; recipient verification rules + DB CHECK; preferences defaults and avoided phrases).
+
+### 13.11 Real data (2026-09-26, owais, Sarvam "Frontend Engineer, Chanakya")
+
+Created through the UI from the job page: portal package with the approved tailored resume v1, approved
+application email v3 and approved cover letter v2, current match and research v1 → every check passed →
+confirmed → `READY_FOR_APPLICATION`; the handoff returned the exact versions, hashes and approval ids with
+integrity `VERIFIED`. No recipient email is known for this job, so an `EMAIL`-channel package is not possible
+without one (none was invented).
+
+## 14. Known limitations
 
 - The claim auditor is lexical: it catches invented numbers, skills, leadership and names, but judges
   paraphrase quality only by word overlap — partly supported statements need the user's review.

@@ -7,6 +7,7 @@ import {
   Gauge,
   ListChecks,
   Mail,
+  Package,
   Play,
   Plug,
   Radar,
@@ -102,6 +103,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </NavLink>
           <NavLink href="/communications">
             <Mail className="size-4" aria-hidden /> Communication Studio
+          </NavLink>
+          <NavLink href="/communication-packages">
+            <Package className="size-4" aria-hidden /> Packages
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System

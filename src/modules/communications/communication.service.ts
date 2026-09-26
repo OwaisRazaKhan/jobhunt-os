@@ -25,10 +25,12 @@ import {
   COMMUNICATION_TYPES,
   COVER_LETTER_TEMPLATES,
   defaultGreeting,
+  PURPOSE_BY_TYPE,
   kindOf,
   LENGTHS,
   RECIPIENT_TYPES,
   TONES,
+  type CommunicationType,
   type ContentSource,
   type VersionStatus,
   type VersionType,
@@ -51,7 +53,15 @@ const optText = (max: number) =>
     z.string().trim().max(max).nullable().default(null),
   );
 
+const refList = z.preprocess(
+  (v) => (typeof v === "string" ? (v ? [v] : []) : v),
+  z.array(z.string().regex(/^[a-z]+:[0-9a-f-]{36}$/)).max(12),
+);
+
 export const communicationSettingsInput = z.object({
+  requestedAction: optText(300).optional(),
+  primaryEvidence: refList.optional(),
+  secondaryEvidence: refList.optional(),
   title: z.string().trim().min(1, "Enter a title").max(200).optional(),
   recipientType: z.enum(RECIPIENT_TYPES).optional(),
   recipientName: optText(200).optional(),
@@ -76,6 +86,7 @@ export const createCommunicationInput = communicationSettingsInput.extend({
   communicationType: z.enum(COMMUNICATION_TYPES),
   jobId: z.preprocess((v) => (v === "" ? null : v), z.uuid().nullable()).default(null),
   resumeVersionId: z.preprocess((v) => (v === "" ? null : v), z.uuid().nullable()).default(null),
+  recipientContextId: z.preprocess((v) => (v === "" ? null : v), z.uuid().nullable()).default(null),
 });
 export type CreateCommunicationInput = z.input<typeof createCommunicationInput>;
 
@@ -439,8 +450,15 @@ export function starterDocument(input: {
   recipientType: (typeof RECIPIENT_TYPES)[number];
   signature: string;
   header?: { name: string | null; email: string | null; phone: string | null };
+  preferredGreeting?: string | null;
+  preferredClosing?: string | null;
 }): CommunicationDocument {
-  const greeting = defaultGreeting(input.recipientName, input.recipientType);
+  const greeting = defaultGreeting(
+    input.recipientName,
+    input.recipientType,
+    input.preferredGreeting,
+  );
+  const closing = input.preferredClosing?.trim() || "Kind regards,";
   if (kindOf(input.type) === "COVER_LETTER") {
     return parseCommunicationDocument({
       kind: "COVER_LETTER",
@@ -455,7 +473,7 @@ export function starterDocument(input: {
       recipient: { name: input.recipientName, title: null, company: input.companyName },
       greeting,
       paragraphs: [],
-      closing: "Kind regards,",
+      closing,
       signature: input.signature,
     });
   }
@@ -470,7 +488,7 @@ export function starterDocument(input: {
     subject,
     greeting,
     bodyParagraphs: [],
-    closing: "Kind regards,",
+    closing,
     signature: input.signature,
   });
 }
@@ -493,6 +511,23 @@ export async function createCommunication(
     const recipientType = input.recipientType ?? "UNKNOWN";
     const signature = await defaultSignature(t, actor, input.signaturePresetId ?? null);
     const profile = kind === "COVER_LETTER" ? await getProfile(actor, t) : null;
+    const prefs = await t.communicationPreference.findUnique({ where: { userId: actor.userId } });
+    // A saved recipient context fills the recipient fields (nothing is guessed).
+    const recipient = input.recipientContextId
+      ? await t.recipientContext.findFirst({
+          where: { id: input.recipientContextId, userId: actor.userId },
+        })
+      : null;
+    if (input.recipientContextId && !recipient)
+      throw new AppError("NOT_FOUND", { publicMessage: "The selected recipient was not found." });
+    if (recipient) {
+      input.recipientType = recipient.recipientType as (typeof RECIPIENT_TYPES)[number];
+      input.recipientName = recipient.name;
+      input.recipientTitle = recipient.title;
+      input.recipientCompany = recipient.company ?? input.recipientCompany ?? null;
+      input.recipientEmail = recipient.email;
+      input.recipientSource = recipient.sourceUrl ?? recipient.source;
+    }
     const communication = await t.communication.create({
       data: {
         userId: actor.userId,
@@ -515,8 +550,13 @@ export async function createCommunication(
         recipientCompany: input.recipientCompany ?? ctx.job?.companyName ?? null,
         recipientEmail: input.recipientEmail ?? null,
         recipientSource: input.recipientSource ?? null,
-        tone: input.tone ?? "NATURAL",
-        length: input.length ?? "STANDARD",
+        tone: input.tone ?? prefs?.defaultTone ?? "NATURAL",
+        length: input.length ?? prefs?.defaultLength ?? "STANDARD",
+        recipientContextId: recipient?.id ?? null,
+        strategy: {
+          purpose: PURPOSE_BY_TYPE[input.communicationType],
+          ...(input.requestedAction ? { requestedAction: input.requestedAction } : {}),
+        } as Prisma.InputJsonValue,
         template,
         pageFormat: input.pageFormat ?? "A4",
         userContext: input.userContext ?? null,
@@ -537,6 +577,8 @@ export async function createCommunication(
             phone: profile.phone ?? null,
           }
         : undefined,
+      preferredGreeting: prefs?.preferredGreeting,
+      preferredClosing: prefs?.preferredClosing,
     });
     // Imported text is data: reduced to plain text and structured, header/recipient from facts.
     const doc = initial
@@ -831,7 +873,32 @@ export async function updateCommunicationSettings(actor: ActorRef, id: string, r
       });
       if (!preset) throw new AppError("NOT_FOUND");
     }
-    const data = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+    const { requestedAction, primaryEvidence, secondaryEvidence, ...columns } = input;
+    const data: Record<string, unknown> = Object.fromEntries(
+      Object.entries(columns).filter(([, v]) => v !== undefined),
+    );
+    if (
+      requestedAction !== undefined ||
+      primaryEvidence !== undefined ||
+      secondaryEvidence !== undefined
+    ) {
+      const current = (communication.strategy ?? {}) as Record<string, unknown>;
+      data.strategy = {
+        ...current,
+        purpose:
+          current.purpose ?? PURPOSE_BY_TYPE[communication.communicationType as CommunicationType],
+        ...(requestedAction !== undefined ? { requestedAction } : {}),
+        ...(primaryEvidence !== undefined ? { primaryEvidence } : {}),
+        ...(secondaryEvidence !== undefined ? { secondaryEvidence } : {}),
+      };
+    }
+    // Editing recipient fields by hand detaches the saved recipient context (it no longer mirrors it).
+    if (
+      ["recipientName", "recipientEmail", "recipientTitle"].some(
+        (k) => k in data && data[k] !== (communication as Record<string, unknown>)[k],
+      )
+    )
+      data.recipientContextId = null;
     const updated = await t.communication.update({ where: { id: communication.id }, data });
     await recordAudit(t, {
       userId: actor.userId,
@@ -914,14 +981,18 @@ export async function runCommunicationCheck(
   const read = await withUserContext(actor.userId, async (t) => {
     const version = await ownedVersion(t, actor, versionId);
     const evidence = await evidenceForVersion(t, actor, version, version.communication);
-    const evidenceHash = sha256Hex(corpusFingerprint(evidence.corpus));
+    const prefs = await t.communicationPreference.findUnique({ where: { userId: actor.userId } });
+    const avoidPhrases = prefs?.avoidPhrases ?? [];
+    const evidenceHash = sha256Hex(
+      corpusFingerprint(evidence.corpus) + JSON.stringify(avoidPhrases),
+    );
     const latest = await t.communicationCheck.findFirst({
       where: { versionId: version.id, userId: actor.userId },
       include: { findings: true },
       orderBy: { createdAt: "desc" },
     });
     const declared = await declaredFromClaims(t, actor, version.id);
-    return { version, evidence, evidenceHash, latest, declared };
+    return { version, evidence, evidenceHash, latest, declared, avoidPhrases };
   });
   const { version, evidence, evidenceHash, latest } = read;
   const c = version.communication;
@@ -948,6 +1019,7 @@ export async function runCommunicationCheck(
       resumeAssociated: Boolean(version.resumeVersionId),
       resumeText: evidence.resume?.text ?? null,
       userContext: c.userContext,
+      avoidPhrases: read.avoidPhrases,
     },
     claims: claims.map((x) => ({
       location: x.location,
@@ -1259,7 +1331,12 @@ export async function duplicateCommunication(actor: ActorRef, id: string) {
       ...settings
     } = source;
     const copy = await t.communication.create({
-      data: { ...settings, status: "ACTIVE", title: `${source.title} (copy)`.slice(0, 200) },
+      data: {
+        ...settings,
+        strategy: (settings.strategy ?? {}) as Prisma.InputJsonValue,
+        status: "ACTIVE",
+        title: `${source.title} (copy)`.slice(0, 200),
+      },
     });
     const version = await insertVersion(t, actor, {
       communicationId: copy.id,

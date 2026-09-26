@@ -25,3 +25,12 @@ export const SEVERITY_TONES: Record<string, Tone> = {
   WARNING: "warning",
   CRITICAL: "danger",
 };
+
+export const PACKAGE_STATUS_TONES: Record<string, Tone> = {
+  INCOMPLETE: "neutral",
+  READY_FOR_REVIEW: "info",
+  READY_FOR_APPLICATION: "success",
+  STALE: "warning",
+  INVALID: "danger",
+  ARCHIVED: "neutral",
+};

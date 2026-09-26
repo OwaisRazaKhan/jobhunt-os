@@ -140,6 +140,14 @@ export default async function ResumePage({ params, searchParams }: PageProps<"/r
                 Compare
               </Link>
             )}
+            {job && status === "APPROVED" && (
+              <Link
+                href={`/communication-packages/new?jobId=${job.id}&resumeVersionId=${version.id}`}
+                className={buttonClass("primary", "sm")}
+              >
+                Create communication package
+              </Link>
+            )}
             <Link
               href={`/communications/new?kind=cover-letter&resumeVersionId=${version.id}${job ? `&jobId=${job.id}` : ""}`}
               className={buttonClass("secondary", "sm")}

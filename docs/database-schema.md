@@ -540,7 +540,9 @@ An approval is **invalidated** automatically if any referenced content hash chan
 > **Implemented in Phase 7:** email and cover-letter drafts live in the dedicated Communication Studio
 > tables (`communications`, `communication_versions`, `communication_claims`, `communication_claim_sources`,
 > `communication_checks`, `communication_check_findings`, `communication_approvals`, `communication_exports`,
-> `signature_presets`) — see [communication-studio.md](communication-studio.md) §2. The `messages` table
+> `signature_presets`) — see [communication-studio.md](communication-studio.md) §2. Packages (`communication_packages`,
+> `communication_package_assets`, `communication_package_checks`), `recipient_contexts` and
+> `communication_preferences` — see §13 there. The `messages` table
 > below is the Phase 10 sending/receiving ledger and is not created yet.
 
 **messages** — SD
