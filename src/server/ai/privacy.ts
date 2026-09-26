@@ -11,6 +11,7 @@ import type { AiMessage } from "./types";
  */
 
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 // 9+ digits with optional separators/country code (does not match years, percentages, small numbers).
 const PHONE = /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?){2,4}\d{3,5}/g;
 
@@ -44,7 +45,12 @@ export function redactText(text: string, ids: Identifiers): string {
       out = out.replace(new RegExp(`\\b${escape(first)}\\b`, "g"), "[CANDIDATE]");
   }
   out = out.replace(EMAIL, "[EMAIL]");
+  // UUIDs (fact references like "experience:<uuid>") can contain digit-only groups that look like
+  // phone numbers; shield them so redaction never corrupts a reference.
+  const shielded: string[] = [];
+  out = out.replace(UUID, (m) => `\u0000${shielded.push(m) - 1}\u0000`);
   out = out.replace(PHONE, (m) => (m.replace(/\D/g, "").length >= 9 ? "[PHONE]" : m));
+  out = out.replace(/\u0000(\d+)\u0000/g, (_, i: string) => shielded[Number(i)]!);
   return out;
 }
 

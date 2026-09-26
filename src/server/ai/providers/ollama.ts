@@ -18,6 +18,7 @@ interface OllamaChatResponse {
   message?: { content?: string; thinking?: string };
   prompt_eval_count?: number;
   eval_count?: number;
+  done_reason?: string;
   error?: string;
 }
 
@@ -41,7 +42,19 @@ export class OllamaProvider implements AiProvider {
     private readonly baseUrl: string,
     private readonly timeoutMs: number,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly maxContext: number = 16_384,
   ) {}
+
+  /**
+   * Context window for one request: estimated prompt tokens (~3 chars/token, generous) plus the
+   * output budget, rounded up to 2048 and capped by OLLAMA_NUM_CTX. Without this Ollama uses its
+   * 4096-token default and silently cuts long JSON outputs off mid-way.
+   */
+  contextFor(request: TextRequest): number {
+    const promptChars = request.messages.reduce((n, m) => n + m.content.length, 0);
+    const needed = Math.ceil(promptChars / 3) + (request.maxOutputTokens ?? 2048) + 512;
+    return Math.min(this.maxContext, Math.max(4096, Math.ceil(needed / 2048) * 2048));
+  }
 
   /** Whether the model advertises "thinking" (cached per model; /api/show). */
   private async supportsThinking(model: string): Promise<boolean> {
@@ -84,6 +97,7 @@ export class OllamaProvider implements AiProvider {
           ...(think ? { think: false } : {}),
           options: {
             temperature: request.temperature ?? 0,
+            num_ctx: this.contextFor(request),
             ...(request.maxOutputTokens ? { num_predict: request.maxOutputTokens } : {}),
           },
         }),
@@ -113,6 +127,13 @@ export class OllamaProvider implements AiProvider {
     const body = (await response.json()) as OllamaChatResponse;
     if (body.error)
       throw new AiProviderError("GENERATION_FAILED", this.id, body.error.slice(0, 200));
+    if (body.done_reason === "length" && format) {
+      throw new AiProviderError(
+        "INVALID_OUTPUT",
+        this.id,
+        `output limit reached (${body.eval_count ?? "?"} tokens; context ${this.contextFor(request)}) — answer truncated`,
+      );
+    }
     return { content: body.message?.content ?? "", body };
   }
 

@@ -231,6 +231,7 @@ export async function runAiTask<T>(input: RunAiTaskInput<T>): Promise<RunAiTaskR
           messages,
           jsonSchema,
           maxOutputTokens: policy.maxOutputTokens,
+          timeoutMs: policy.timeoutMs,
           signal: input.signal,
         });
         usage = response.usage;

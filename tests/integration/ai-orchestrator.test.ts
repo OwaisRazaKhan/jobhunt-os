@@ -369,4 +369,9 @@ describe("privacy filter", () => {
     );
     expect(out).toBe("[CANDIDATE] ([EMAIL], [PHONE]) grew revenue 30% in 2024; contact [EMAIL]");
   });
+  it("never corrupts fact references whose UUIDs contain digit-only groups", () => {
+    const refs =
+      "b_1 | cites: experience:01a0db28-4000-7123-8456-123456789012, skill:12345678-1234-4123-8123-123456789012";
+    expect(redactText(refs, { names: [], emails: [], phones: [] })).toBe(refs);
+  });
 });

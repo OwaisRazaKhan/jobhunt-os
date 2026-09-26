@@ -69,6 +69,54 @@ describe("OllamaProvider", () => {
     });
   });
 
+  it("sizes num_ctx per request (never Ollama's 4096 default for long outputs) and caps it", async () => {
+    const fetchMock = ollama({
+      "/api/show": () => json({ capabilities: [] }),
+      "/api/chat": () => json({ message: { content: "{}" } }),
+    });
+    const provider = new OllamaProvider(
+      "http://x",
+      5000,
+      fetchMock as unknown as typeof fetch,
+      16_384,
+    );
+    const long = {
+      ...request,
+      messages: [{ role: "user" as const, content: "x".repeat(4_600) }],
+      maxOutputTokens: 8000,
+    };
+    await provider.generateStructured(long);
+    const chat = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/api/chat")) as unknown as [
+      URL,
+      RequestInit,
+    ];
+    const ctx = JSON.parse(String(chat[1].body)).options.num_ctx as number;
+    expect(ctx).toBeGreaterThanOrEqual(1534 + 8000); // prompt estimate + output budget
+    expect(ctx % 2048).toBe(0);
+    expect(provider.contextFor({ ...long, maxOutputTokens: 200_000 })).toBe(16_384); // capped
+    expect(provider.contextFor({ ...request, maxOutputTokens: 64 })).toBe(4096); // small tasks stay small
+  });
+
+  it("reports a truncated answer (done_reason=length) as an output-limit failure, not silent bad JSON", async () => {
+    const provider = new OllamaProvider(
+      "http://x",
+      5000,
+      ollama({
+        "/api/show": () => json({ capabilities: [] }),
+        "/api/chat": () =>
+          json({
+            message: { content: '{"facts":[{"cat' },
+            done_reason: "length",
+            eval_count: 2770,
+          }),
+      }) as unknown as typeof fetch,
+    );
+    await expect(provider.generateStructured(request)).rejects.toMatchObject({
+      kind: "INVALID_OUTPUT",
+      message: expect.stringContaining("output limit reached"),
+    });
+  });
+
   it("does not send `think` to models without the thinking capability", async () => {
     const fetchMock = ollama({
       "/api/show": () => json({ capabilities: ["completion"] }),

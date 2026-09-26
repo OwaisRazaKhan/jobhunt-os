@@ -68,6 +68,11 @@ Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config i
 | `npm run build`                       | pass                                                                                                                                      |
 | `REAL_AI=1 npx vitest run tests/real` | passed on the local machine (Ollama `qwen3.5:9b`, Gemini `gemini-3.8-flash`); skipped where no `.env`/providers exist (e.g. Claude Cloud) |
 
+## Fixed during the real-data run (2026-09-26)
+
+- **CV AI extraction truncated:** Ollama used its default 4096-token context, cutting long JSON (a full CV) at ~2.8k output tokens → `SCHEMA_INVALID`. Now each request sets `num_ctx` (prompt estimate + output budget, capped by `OLLAMA_NUM_CTX`, default 16384), truncation (`done_reason=length`) is reported as an output-limit failure, and CV extraction / resume tailoring have 300 s timeouts. Real CV: 45 facts extracted locally (7,240 output tokens).
+- **Cloud redaction corrupted fact references:** the phone-number pattern could match digit-only UUID groups in `<kind>:<uuid>` references. UUIDs are now shielded before redaction (regression test added).
+
 ## Known issues
 
 - **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and

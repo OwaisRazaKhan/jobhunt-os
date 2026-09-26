@@ -28,6 +28,8 @@ export interface TaskPolicy {
   /** Bounded retries for retryable failures (timeouts/5xx). Quota/auth never retry. */
   maxRetries: number;
   maxOutputTokens: number;
+  /** Per-task timeout (local models need longer for long structured outputs) */
+  timeoutMs?: number;
   /** Prompt contains third-party content (job/company/document text) that must be treated as data */
   untrustedContent: boolean;
   /** PUBLIC results may be reused from the user's own recent identical generation */
@@ -46,7 +48,8 @@ export const TASKS: Record<AiTask, TaskPolicy> = {
     structuredOutputRequired: true,
     fallback: "rules",
     maxRetries: 1,
-    maxOutputTokens: 6000,
+    maxOutputTokens: 8000,
+    timeoutMs: 300_000,
     untrustedContent: true,
     cacheable: false,
     description:
@@ -95,6 +98,7 @@ export const TASKS: Record<AiTask, TaskPolicy> = {
     fallback: "deterministic",
     maxRetries: 1,
     maxOutputTokens: 8000,
+    timeoutMs: 300_000,
     untrustedContent: true,
     cacheable: false,
     description:

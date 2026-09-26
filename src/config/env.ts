@@ -49,6 +49,12 @@ export const serverEnvSchema = z.object({
   OLLAMA_BASE_URL: z.url().default("http://127.0.0.1:11434"),
   OLLAMA_MODEL: z.string().min(1).default("llama3.1:8b"),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  /**
+   * Upper bound for Ollama's context window (prompt + output tokens). Ollama defaults to 4096,
+   * which silently truncates long structured outputs (e.g. a full CV). Each request asks only
+   * for what it needs, up to this cap.
+   */
+  OLLAMA_NUM_CTX: z.coerce.number().int().min(2048).max(262_144).default(16_384),
   /** Provider for tasks without a stronger preference. Private candidate data always stays local by default. */
   AI_DEFAULT_PROVIDER: z.enum(["ollama", "gemini"]).default("ollama"),
   /** Preferred provider for PUBLIC-only tasks (e.g. research synthesis over public sources). */

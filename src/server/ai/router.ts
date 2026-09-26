@@ -39,9 +39,12 @@ export function configuredProviders(): Partial<Record<ProviderKind, ModelChoice>
   }
   if (!env.AI_ENABLED) return {};
   const out: Partial<Record<ProviderKind, ModelChoice>> = {};
-  const ollamaKey = `ollama|${env.OLLAMA_BASE_URL}|${env.OLLAMA_TIMEOUT_MS}`;
+  const ollamaKey = `ollama|${env.OLLAMA_BASE_URL}|${env.OLLAMA_TIMEOUT_MS}|${env.OLLAMA_NUM_CTX}`;
   if (!providerCache.has(ollamaKey))
-    providerCache.set(ollamaKey, new OllamaProvider(env.OLLAMA_BASE_URL, env.OLLAMA_TIMEOUT_MS));
+    providerCache.set(
+      ollamaKey,
+      new OllamaProvider(env.OLLAMA_BASE_URL, env.OLLAMA_TIMEOUT_MS, fetch, env.OLLAMA_NUM_CTX),
+    );
   out.ollama = { provider: providerCache.get(ollamaKey)!, model: env.OLLAMA_MODEL };
   if (env.GEMINI_API_KEY) {
     const geminiKey = `gemini|${env.GEMINI_TIMEOUT_MS}|${env.GEMINI_API_KEY.length}`;
