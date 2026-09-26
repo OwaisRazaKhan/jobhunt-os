@@ -1,0 +1,84 @@
+# JOBHUNT OS — Project Status
+
+Single handover record of the **verified** state. Update it at the end of every phase.
+Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail: [docs/](docs/README.md).
+
+## Last synchronized
+
+**2026-09-26** — re-sync after development continued in Claude Cloud (commits `5d844f7` … `949c944`).
+
+| Item                | State                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current phase       | **Phase 6 — Resume Studio (next, not started)**                                                                                                 |
+| Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                |
+| Partially completed | none                                                                                                                                            |
+| Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                |
+| Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                        |
+| Migrations          | 9 local = 9 applied (`prisma migrate status`: up to date)                                                                                       |
+| Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`) |
+| AI                  | local Ollama only (`llama3.1:8b`); optional — every feature works without it                                                                    |
+
+## Phase state (verified)
+
+| Phase | State    | Evidence                                                                                                                                                        |
+| ----- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Complete | modular monolith, `docs/`, env contract, RLS model, error/route helpers                                                                                         |
+| 1     | Complete | candidate facts + provenance, CV import (PDF/DOCX/TXT), review queue, documents in private storage                                                              |
+| 2     | Complete | Ashby/Lever/Greenhouse adapters, Search Profiles, discovery runs, 3-layer dedupe, source health, scheduler (acceptance: `docs/job-discovery.md` §10)            |
+| 3     | Complete | server-side `/jobs` search (tsvector), filters, sorting, saved searches, bookmarks/hidden (`docs/job-search.md`)                                                |
+| 4     | Complete | versioned requirement sets, deterministic evidence-first engine, history, batches, optional AI assist (`docs/matching.md`)                                      |
+| 5     | Complete | SSRF-safe research fetcher with robots.txt, claims with evidence, company resolution, exports (`docs/research.md`)                                              |
+| 6     | Missing  | no resume model, route, service or renderer. Present foundations: candidate facts, CV import (`unpdf`, `mammoth`), local AI router, reserved `documents` module |
+
+## Database (JOBHUNTOS, verified live)
+
+- 56 tables, **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- App role `jobhunt_app`: NOLOGIN, NOBYPASSRLS; every user-owned table has an owner policy
+  `user_id = app_current_user_id()`. Shared catalog tables (jobs, companies, postings, requirement sets)
+  follow job visibility. Better Auth tables have no app policies (owner client only).
+- 97 CHECK constraints. Functions: `app_current_user_id` (project), `rls_auto_enable` (Supabase platform
+  `ensure_rls` event trigger — compatible, not managed by this repo). No triggers, no `pg_cron`.
+- Storage: bucket `candidate-documents` — **private**, 10 MB limit, no public policies (server uses the
+  service role and short-lived signed URLs).
+- Real data present (preserve it): 3 users, 1,721 jobs (all PUBLIC catalog), 1,721 source postings,
+  2,735 job requirements, 45 matches, 2 search profiles, 5 discovery runs, 39 sync runs, 1 candidate profile,
+  1 stored document, 106 audit records. Research tables are empty (not run on real data yet).
+
+## Scheduling
+
+Discovery schedules run through `POST /api/internal/cron/discovery` (requires `CRON_SECRET`) or the local
+`npm run scheduler`. Supabase `pg_cron` is documented as optional and is **not** enabled.
+
+## Environment
+
+Required and set: `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ENCRYPTION_KEY`,
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `CRON_SECRET`.
+Optional, unset: `SEARXNG_URL` (research web search; without it the company website is confirmed once by the
+user), `GOOGLE_CLIENT_ID/SECRET`, `CRON_MAX_PROFILES`, `RESEARCH_*` limits (defaults apply).
+Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config is read via `src/config/env.ts`.
+
+## Validation baseline (2026-09-26)
+
+| Command                | Result                                           |
+| ---------------------- | ------------------------------------------------ |
+| `npm run typecheck`    | pass                                             |
+| `npm run lint`         | pass                                             |
+| `npm run format:check` | pass (after `.gitattributes` LF fix — see below) |
+| `npm test`             | 29 files, **383 tests passed**                   |
+| `npm run build`        | pass (44 routes)                                 |
+
+## Known issues
+
+- **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and
+  `format:check` failed on 137 files. `.gitattributes` now forces LF; no content changed.
+- Ollama is not running on this machine → AI assistance shows "Offline"; deterministic paths work.
+- The signed-in `owais` account has no candidate profile yet, so matching shows "Complete your candidate
+  profile". The existing matches belong to another account (per-user isolation working as designed).
+- Documented limitations: `docs/matching.md` and `docs/research.md` → "Known limitations"
+  (in-process batches/rate limits, no headless browser for research).
+
+## Next phase
+
+**Phase 6 — Resume Studio:** master resume → structured resume → job-specific tailoring → fact
+validation → change review → resume check → human approval → PDF/DOCX. Build on candidate facts
+(`getUsableCandidateFacts`), Phase 4 requirement/match evidence and the local-only AI router.

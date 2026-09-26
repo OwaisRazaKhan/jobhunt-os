@@ -1,0 +1,7 @@
+# Keep LF everywhere (Prettier enforces LF; Windows autocrlf would otherwise break format:check)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.ico binary
