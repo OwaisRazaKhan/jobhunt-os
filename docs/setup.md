@@ -81,6 +81,10 @@ If Ollama is offline, everything still works. Uploads fall back to rule-based ex
 
 ## 6. Run
 
+After every `git pull` that adds a migration, apply it first: `npm run db:migrate:deploy`.
+`npm run dev` regenerates the Prisma client automatically (`predev`), so the app never runs with a
+client that is older than `prisma/schema.prisma`.
+
 ```bash
 npm run dev
 ```
