@@ -96,9 +96,9 @@ describe("GeminiProvider", () => {
         },
       }) as never,
     );
-    const error = await provider
-      .generateStructured(request)
-      .catch((e) => e as Error & { publicMessage: string });
+    const error = (await provider.generateStructured(request).catch((e: unknown) => e)) as Error & {
+      publicMessage: string;
+    };
     expect(error.message).not.toContain(KEY);
     expect(error.publicMessage).not.toContain(KEY);
   });
