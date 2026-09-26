@@ -9,6 +9,7 @@ import {
   Play,
   Plug,
   Radar,
+  ScrollText,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -91,6 +92,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </NavLink>
           <NavLink href="/companies">
             <Building2 className="size-4" aria-hidden /> Companies
+          </NavLink>
+          <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
+            Documents
+          </p>
+          <NavLink href="/resumes">
+            <ScrollText className="size-4" aria-hidden /> Resume Studio
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System

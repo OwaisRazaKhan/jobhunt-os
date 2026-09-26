@@ -96,6 +96,8 @@ Each phase ends with a review and **explicit approval** before the next begins. 
 
 ## Phase 6 — Resume Studio
 
+> **Status: built — awaiting approval.** Details: [resume-studio.md](resume-studio.md). Built: structured ResumeDocument + versions (SHA-256 content hash, immutable approved content), master resume from verified facts, editor with autosave, deterministic + local-AI tailoring with claim validation and change sets, Resume Check (no ATS score), side-by-side comparison, approval flow, real PDF (pdfkit) / DOCX (docx) export to private storage with signed downloads, `TAILOR_RESUME` service contract.
+
 - **Objective:** grounded, versioned, job-specific resumes.
 - **Dependencies:** Phases 1, 4.
 - **Inputs:** verified candidate facts, master resume, job requirements, match evidence.

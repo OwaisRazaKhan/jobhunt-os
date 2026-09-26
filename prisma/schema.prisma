@@ -136,6 +136,13 @@ model User {
   researchClaimEvidence   ResearchClaimEvidence[]
   researchRunSources      ResearchRunSource[]
   researchNotes           ResearchNote[]
+  resumes                 Resume[]
+  resumeVersions          ResumeVersion[]
+  resumeFactReferences    ResumeFactReference[]
+  resumeChecks            ResumeCheck[]
+  resumeCheckFindings     ResumeCheckFinding[]
+  resumeApprovals         ResumeApproval[]
+  resumeExports           ResumeExport[]
 
   @@map("users")
 }
@@ -855,6 +862,9 @@ model Job {
   researchSources     ResearchSource[]
   jobResearch         JobResearch[]
   researchNotes       ResearchNote[]
+  resumes             Resume[]
+  resumeVersions      ResumeVersion[]
+  resumeChecks        ResumeCheck[]
 
   @@index([createdByUserId, deletedAt, createdAt(sort: Desc)])
   @@index([visibility, status])
@@ -1728,4 +1738,217 @@ model ResearchNote {
   @@index([userId, companyId], map: "research_notes_user_company_idx")
   @@index([userId, jobId], map: "research_notes_user_job_idx")
   @@map("research_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Resume Studio (see docs/resume-studio.md)
+//   A resume is a PRESENTATION of candidate facts, never a source of truth.
+//   resumes: user-owned containers (one master per user, tailored ones link a job).
+//   resume_versions: the structured ResumeDocument (validated JSON) + SHA-256 content
+//     hash. APPROVED versions are immutable (DB trigger); edits create new versions.
+//   resume_fact_references: which candidate fact supports which resume item.
+//   resume_checks / findings: deterministic Resume Check results for a content hash.
+//   resume_approvals: exact-content approvals (hash); revoked, never deleted.
+//   resume_exports: generated PDF/DOCX files in private storage.
+// Closed value sets are CHECK constraints in the migration SQL.
+// ---------------------------------------------------------------------------
+
+model Resume {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  name             String
+  description      String?
+  /// MASTER | TAILORED | GENERAL
+  kind             String
+  /// ACTIVE | ARCHIVED
+  status           String    @default("ACTIVE")
+  /// CLASSIC | MODERN | TECHNICAL | EDITORIAL (code-defined templates)
+  template         String    @default("CLASSIC")
+  /// A4 | LETTER
+  pageFormat       String    @default("A4") @map("page_format")
+  /// Resume this one was duplicated or tailored from
+  sourceResumeId   String?   @map("source_resume_id") @db.Uuid
+  /// Target job for tailored resumes
+  targetJobId      String?   @map("target_job_id") @db.Uuid
+  /// Latest version (working head)
+  currentVersionId String?   @unique @map("current_version_id") @db.Uuid
+  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceResume   Resume?         @relation("ResumeSource", fields: [sourceResumeId], references: [id], onDelete: SetNull)
+  derived        Resume[]        @relation("ResumeSource")
+  targetJob      Job?            @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
+  currentVersion ResumeVersion?  @relation("ResumeCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ResumeVersion[] @relation("ResumeVersions")
+
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@index([sourceResumeId])
+  @@index([targetJobId])
+  @@map("resumes")
+}
+
+model ResumeVersion {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  resumeId        String   @map("resume_id") @db.Uuid
+  versionNumber   Int      @map("version_number")
+  parentVersionId String?  @map("parent_version_id") @db.Uuid
+  /// MASTER | TAILORED | MANUAL_EDIT | RESTORED | DUPLICATE
+  versionType     String   @map("version_type")
+  /// DRAFT | READY_FOR_REVIEW | APPROVED | REJECTED | ARCHIVED
+  status          String   @default("DRAFT")
+  title           String
+  targetJobId     String?  @map("target_job_id") @db.Uuid
+  /// Canonical ResumeDocument (src/modules/resumes/document.ts), validated by Zod
+  content         Json
+  /// ResumeDocument schema version
+  schemaVersion   Int      @default(1) @map("schema_version")
+  /// SHA-256 of the canonical normalized content (content identity, not the id)
+  contentHash     String   @map("content_hash") @db.Char(64)
+  /// Diff metadata vs the parent version (added / removed / changed / reordered)
+  changeSummary   Json     @default("{}") @map("change_summary")
+  /// Tailoring change set with reasons (TAILORED versions)
+  changeSet       Json?    @map("change_set")
+  /// True when any content was produced with AI assistance
+  aiAssisted      Boolean  @default(false) @map("ai_assisted")
+  /// Generation metadata: method, provider, model, options (no private content)
+  generation      Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume         Resume                @relation("ResumeVersions", fields: [resumeId], references: [id], onDelete: Cascade)
+  currentOf      Resume?               @relation("ResumeCurrentVersion")
+  parent         ResumeVersion?        @relation("ResumeVersionParent", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  children       ResumeVersion[]       @relation("ResumeVersionParent")
+  targetJob      Job?                  @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
+  factReferences ResumeFactReference[]
+  checks         ResumeCheck[]
+  approvals      ResumeApproval[]
+  exports        ResumeExport[]
+
+  @@unique([resumeId, versionNumber])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([parentVersionId])
+  @@index([targetJobId])
+  @@map("resume_versions")
+}
+
+model ResumeFactReference {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  versionId String   @map("version_id") @db.Uuid
+  /// Stable item id inside the ResumeDocument
+  itemId    String   @map("item_id")
+  /// Candidate fact reference "<kind>:<uuid>" (src/modules/candidate/knowledge.service.ts)
+  factRef   String   @map("fact_ref")
+  factKind  String   @map("fact_kind")
+  factId    String   @map("fact_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version ResumeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, itemId, factRef])
+  @@index([userId, factId])
+  @@map("resume_fact_references")
+}
+
+model ResumeCheck {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  versionId      String   @map("version_id") @db.Uuid
+  /// Content hash that was checked (a check is stale when the version hash differs)
+  contentHash    String   @map("content_hash") @db.Char(64)
+  /// Job the alignment checks were run against (optional)
+  jobId          String?  @map("job_id") @db.Uuid
+  checkerVersion String   @map("checker_version")
+  /// { passed, issues, warnings, opportunities, byCategory }
+  summary        Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version  ResumeVersion        @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  job      Job?                 @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  findings ResumeCheckFinding[]
+
+  @@index([versionId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([jobId])
+  @@map("resume_checks")
+}
+
+model ResumeCheckFinding {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  userId         String  @map("user_id") @db.Uuid
+  checkId        String  @map("check_id") @db.Uuid
+  /// STRUCTURE | CONTENT | ALIGNMENT | READABILITY | FORMATTING | PROVENANCE
+  category       String
+  /// Stable rule code, e.g. "contact.missing"
+  code           String
+  /// PASS | INFO | OPPORTUNITY | WARNING | ISSUE
+  severity       String
+  message        String
+  recommendation String?
+  /// Item the finding points at (optional)
+  itemId         String? @map("item_id")
+  evidence       Json    @default("{}")
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  check ResumeCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@index([checkId])
+  @@index([userId])
+  @@map("resume_check_findings")
+}
+
+model ResumeApproval {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  versionId    String    @map("version_id") @db.Uuid
+  /// Exact content that was approved
+  contentHash  String    @map("content_hash") @db.Char(64)
+  approvedAt   DateTime  @default(now()) @map("approved_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokeReason String?   @map("revoke_reason")
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version ResumeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([userId])
+  @@map("resume_approvals")
+}
+
+model ResumeExport {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  versionId       String    @map("version_id") @db.Uuid
+  /// PDF | DOCX
+  format          String
+  /// PENDING | SUCCEEDED | FAILED
+  status          String    @default("PENDING")
+  template        String
+  pageFormat      String    @map("page_format")
+  /// Resume content hash the file was rendered from
+  contentHash     String    @map("content_hash") @db.Char(64)
+  /// Whether contentHash equals an active approval of the version at export time
+  matchesApproval Boolean   @default(false) @map("matches_approval")
+  storagePath     String?   @map("storage_path")
+  fileName        String?   @map("file_name")
+  byteSize        Int?      @map("byte_size")
+  /// SHA-256 of the generated file bytes
+  fileSha256      String?   @map("file_sha256") @db.Char(64)
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version ResumeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("resume_exports")
 }

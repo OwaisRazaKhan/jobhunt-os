@@ -4,6 +4,10 @@ Status: **design — not yet migrated.** Tables are created in the phase listed 
 
 ---
 
+## 00. Phase 6 Resume Studio
+
+Migration `20261010000000_phase6_resume_studio`: `resumes`, `resume_versions` (canonical ResumeDocument JSON + SHA-256 `content_hash`; trigger `resume_versions_protect_approved` makes APPROVED content immutable), `resume_fact_references`, `resume_checks`, `resume_check_findings`, `resume_approvals` (one active per version), `resume_exports` (user-scoped storage path CHECK). All owner-only RLS; no DELETE grant on history tables. Details: [resume-studio.md](./resume-studio.md).
+
 ## 0. Phase 1 as built
 
 Migration `prisma/migrations/20260926000000_phase1_candidate` created 21 tables: `users`, `sessions`, `accounts`, `verifications` (Better Auth), `countries` (249 ISO rows; the 19 initial target markets are flagged), `candidate_profiles`, `candidate_education`, `candidate_experiences`, `candidate_projects`, `candidate_achievements`, `candidate_skills`, `candidate_certifications`, `candidate_portfolio_items`, `candidate_languages`, `candidate_work_authorizations`, `candidate_preferences`, `candidate_target_locations`, `candidate_documents`, `candidate_fact_candidates`, `ai_generations`, `audit_logs`.

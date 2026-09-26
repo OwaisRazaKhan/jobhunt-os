@@ -93,7 +93,22 @@ export type AuditAction =
   | "saved_search_created"
   | "saved_search_updated"
   | "saved_search_duplicated"
-  | "saved_search_deleted";
+  | "saved_search_deleted"
+  | "resume_created"
+  | "resume_edited"
+  | "resume_version_created"
+  | "resume_restored"
+  | "resume_duplicated"
+  | "resume_settings_updated"
+  | "resume_tailored"
+  | "resume_checked"
+  | "resume_status_changed"
+  | "resume_approved"
+  | "resume_approval_revoked"
+  | "resume_archived"
+  | "resume_unarchived"
+  | "resume_exported"
+  | "resume_export_failed";
 
 export interface AuditEntry {
   userId: string;

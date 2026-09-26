@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // pdfkit reads its standard font metrics from its package directory at runtime.
+  serverExternalPackages: ["pdfkit"],
   // Search Profiles live under /jobs/profiles; the short /search-profiles URLs point there.
   redirects() {
     return [

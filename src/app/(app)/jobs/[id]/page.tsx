@@ -197,6 +197,17 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
             showLabel
           />
         </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Link href={`/jobs/${job.id}/match`} className={buttonClass("ghost", "sm")}>
+            Match
+          </Link>
+          <Link href={`/jobs/${job.id}/research`} className={buttonClass("ghost", "sm")}>
+            Research
+          </Link>
+          <Link href={`/resumes/tailor?job=${job.id}`} className={buttonClass("primary", "sm")}>
+            Tailor resume
+          </Link>
+        </div>
         {canEdit && (
           <div className="flex gap-2">
             <Link href={`/jobs/${job.id}/edit`} className={buttonClass("secondary", "sm")}>

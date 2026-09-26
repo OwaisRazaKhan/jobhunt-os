@@ -18,6 +18,8 @@ const TASK_POLICIES: Record<AiTask, TaskPolicy> = {
   "matching.semantic_skills": { personalData: true },
   // Public job + company source excerpts only — no candidate data is sent.
   "research.synthesize": { personalData: false },
+  // Candidate facts + resume content: local providers only.
+  "resume.tailor": { personalData: true },
 };
 
 let providerOverride: AiProvider[] | undefined;
