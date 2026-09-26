@@ -5,16 +5,16 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-26** — AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-26** — Phase 7 (Communication Studio) Checkpoint 1: data model, migration (applied), service layer, quality engine and `/communications` dashboard. Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 6 — Resume Studio: built, awaiting approval**                                                                                                                           |
+| Current phase       | **Phase 7 — Communication Studio: Checkpoint 1 done, awaiting inspection** (Phase 6 built and used on real data)                                                                |
 | Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
 | Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
-| Migrations          | 12 in the repo, all applied on JOBHUNTOS (latest `20261015000000_advisor_fixes`)                                                                                                |
+| Migrations          | 13 in the repo, all applied on JOBHUNTOS (latest `20261020000000_phase7_communication_studio`)                                                                                  |
 | Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
 | AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
@@ -30,17 +30,19 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 | 5     | Complete | SSRF-safe research fetcher with robots.txt, claims with evidence, company resolution, exports (`docs/research.md`)                                                 |
 | 6     | Built    | Resume Studio: versions + content hash, editor, tailoring + claim validation, Resume Check, approval, PDF/DOCX export (`docs/resume-studio.md`); awaiting approval |
 
+| 7 | CP1 done | Communication Studio data model + RLS, document schemas, content hash, quality engine, services, `/communications` (`docs/communication-studio.md`); no sending of any kind |
+
 | AI | Complete | Provider registry, task registry + sensitivity, privacy routing, orchestrator (`runAiTask`) used by all 4 AI call sites, `/settings/ai`; real tests passed with `qwen3.5:9b` and `gemini-3.8-flash` |
 
 ## Database (JOBHUNTOS, verified live)
 
-- 64 tables, **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- 73 tables (9 added by Phase 7), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
 - Supabase advisor lints (re-checked 2026-09-26 with read-only catalog queries — the Supabase MCP was not available in the session): security and performance findings **all resolved** by `20261015000000_advisor_fixes` (32 FK indexes, pinned trigger `search_path`, no multiple permissive policies); guarded by `tests/integration/advisors.test.ts`.
 - App role `jobhunt_app`: NOLOGIN, NOBYPASSRLS; every user-owned table has an owner policy
   `user_id = app_current_user_id()`. Shared catalog tables (jobs, companies, postings, requirement sets)
   follow job visibility. Better Auth tables have no app policies (owner client only).
 - 97 CHECK constraints. Functions: `app_current_user_id` (project), `rls_auto_enable` (Supabase platform
-  `ensure_rls` event trigger — compatible, not managed by this repo). One trigger: `resume_versions_protect_approved` (approved resume content is immutable). No `pg_cron`.
+  `ensure_rls` event trigger — compatible, not managed by this repo). Triggers: `resume_versions_protect_approved` and `communication_versions_protect_approved` (approved resume / communication content is immutable). Phase 7 advisors re-checked live after applying the migration: all clean. No `pg_cron`.
 - Storage: bucket `candidate-documents` — **private**, 10 MB limit, no public policies (server uses the
   service role and short-lived signed URLs).
 - Real data present (preserve it): 3 users, 1,721 jobs (all PUBLIC catalog), 1,721 source postings,
@@ -88,5 +90,4 @@ Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config i
 
 ## Next phase
 
-**Phase 7 — Email & Cover Letter Studio** (after Phase 6 approval). Consumes `TAILOR_RESUME`
-(`src/modules/resumes/tailor.service.ts`) and approved resume versions (content hash).
+**Phase 7 — Checkpoint 2** (after inspection of CP1): communication editor and AI generation via `runAiTask` (`email.generate` / `cover_letter.generate`, private data local by default), claim validation. See `docs/communication-studio.md` §1.

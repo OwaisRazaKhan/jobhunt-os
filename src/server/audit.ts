@@ -112,7 +112,21 @@ export type AuditAction =
   | "ai_preferences_updated"
   | "private_cloud_ai_enabled"
   | "private_cloud_ai_disabled"
-  | "ai_provider_tested";
+  | "ai_provider_tested"
+  | "communication_created"
+  | "communication_edited"
+  | "communication_version_created"
+  | "communication_restored"
+  | "communication_checked"
+  | "communication_status_changed"
+  | "communication_approved"
+  | "communication_approval_revoked"
+  | "communication_archived"
+  | "communication_unarchived"
+  | "communication_exported"
+  | "communication_export_failed"
+  | "signature_preset_saved"
+  | "signature_preset_deleted";
 
 export interface AuditEntry {
   userId: string;

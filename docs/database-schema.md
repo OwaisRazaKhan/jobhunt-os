@@ -537,6 +537,12 @@ An approval is **invalidated** automatically if any referenced content hash chan
 
 ### 3.11 Messaging (P7 drafts, P10 sending)
 
+> **Implemented in Phase 7:** email and cover-letter drafts live in the dedicated Communication Studio
+> tables (`communications`, `communication_versions`, `communication_claims`, `communication_claim_sources`,
+> `communication_checks`, `communication_check_findings`, `communication_approvals`, `communication_exports`,
+> `signature_presets`) — see [communication-studio.md](communication-studio.md) §2. The `messages` table
+> below is the Phase 10 sending/receiving ledger and is not created yet.
+
 **messages** — SD
 `user_id`, `application_id null FK`, `contact_id null FK`, `direction` (`OUTBOUND`,`INBOUND`), `status` (`DRAFT`,`APPROVED`,`QUEUED`,`SENT`,`FAILED`,`RECEIVED`), `subject`, `body_text`, `document_version_id null FK`, `integration_connection_id null FK`, `provider_message_id`, `provider_thread_id`, `sent_at`, `received_at`. IX `(user_id, application_id)`, UQ `(integration_connection_id, provider_message_id)`.
 

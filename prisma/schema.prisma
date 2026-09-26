@@ -144,6 +144,15 @@ model User {
   resumeApprovals         ResumeApproval[]
   resumeExports           ResumeExport[]
   aiPreferences           AiPreferences?
+  communications          Communication[]
+  communicationVersions   CommunicationVersion[]
+  communicationClaims     CommunicationClaim[]
+  communicationSources    CommunicationClaimSource[]
+  communicationChecks     CommunicationCheck[]
+  communicationFindings   CommunicationCheckFinding[]
+  communicationApprovals  CommunicationApproval[]
+  communicationExports    CommunicationExport[]
+  signaturePresets        SignaturePreset[]
 
   @@map("users")
 }
@@ -822,6 +831,7 @@ model Company {
   companyResearch CompanyResearch[]
   jobResearch     JobResearch[]
   researchNotes   ResearchNote[]
+  communications  Communication[]
 
   @@map("companies")
 }
@@ -908,6 +918,7 @@ model Job {
   resumes             Resume[]
   resumeVersions      ResumeVersion[]
   resumeChecks        ResumeCheck[]
+  communications      Communication[]
 
   @@index([createdByUserId, deletedAt, createdAt(sort: Desc)])
   @@index([visibility, status])
@@ -1307,10 +1318,11 @@ model JobRequirementSet {
   requirementCount Int      @default(0) @map("requirement_count")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  requirements JobRequirement[]
-  matches      JobMatch[]
-  jobResearch  JobResearch[]
+  job                   Job                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  requirements          JobRequirement[]
+  matches               JobMatch[]
+  jobResearch           JobResearch[]
+  communicationVersions CommunicationVersion[]
 
   @@unique([jobId, version])
   @@map("job_requirement_sets")
@@ -1350,13 +1362,14 @@ model JobMatch {
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job                Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  candidate          CandidateProfile            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  dimensions         JobMatchDimension[]
-  requirementSet     JobRequirementSet?          @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
-  aiGeneration       AiGeneration?               @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
-  requirementResults JobMatchRequirementResult[]
+  user                  User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job                   Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate             CandidateProfile            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  dimensions            JobMatchDimension[]
+  requirementSet        JobRequirementSet?          @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
+  aiGeneration          AiGeneration?               @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  requirementResults    JobMatchRequirementResult[]
+  communicationVersions CommunicationVersion[]
 
   @@index([userId, jobId, computedAt(sort: Desc)])
   @@index([userId, overallStatus])
@@ -1699,13 +1712,14 @@ model JobResearch {
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job             Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  run             ResearchRun?       @relation(fields: [runId], references: [id], onDelete: SetNull)
-  companyResearch CompanyResearch?   @relation(fields: [companyResearchId], references: [id], onDelete: SetNull)
-  requirementSet  JobRequirementSet? @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
-  claims          ResearchClaim[]
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job                   Job                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  company               Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  run                   ResearchRun?           @relation(fields: [runId], references: [id], onDelete: SetNull)
+  companyResearch       CompanyResearch?       @relation(fields: [companyResearchId], references: [id], onDelete: SetNull)
+  requirementSet        JobRequirementSet?     @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
+  claims                ResearchClaim[]
+  communicationVersions CommunicationVersion[]
 
   @@unique([userId, jobId, version], map: "job_research_version_key")
   @@index([userId, companyId], map: "job_research_company_idx")
@@ -1743,10 +1757,11 @@ model ResearchClaim {
   rejectionReason   String?  @map("rejection_reason")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyResearch CompanyResearch?        @relation(fields: [companyResearchId], references: [id], onDelete: Cascade)
-  jobResearch     JobResearch?            @relation(fields: [jobResearchId], references: [id], onDelete: Cascade)
-  evidence        ResearchClaimEvidence[]
+  user                 User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyResearch      CompanyResearch?           @relation(fields: [companyResearchId], references: [id], onDelete: Cascade)
+  jobResearch          JobResearch?               @relation(fields: [jobResearchId], references: [id], onDelete: Cascade)
+  evidence             ResearchClaimEvidence[]
+  communicationSources CommunicationClaimSource[]
 
   @@index([companyResearchId, position], map: "research_claims_company_research_idx")
   @@index([jobResearchId, position], map: "research_claims_job_research_idx")
@@ -1893,16 +1908,18 @@ model ResumeVersion {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resume         Resume                @relation("ResumeVersions", fields: [resumeId], references: [id], onDelete: Cascade)
-  currentOf      Resume?               @relation("ResumeCurrentVersion")
-  parent         ResumeVersion?        @relation("ResumeVersionParent", fields: [parentVersionId], references: [id], onDelete: SetNull)
-  children       ResumeVersion[]       @relation("ResumeVersionParent")
-  targetJob      Job?                  @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
-  factReferences ResumeFactReference[]
-  checks         ResumeCheck[]
-  approvals      ResumeApproval[]
-  exports        ResumeExport[]
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume                Resume                 @relation("ResumeVersions", fields: [resumeId], references: [id], onDelete: Cascade)
+  currentOf             Resume?                @relation("ResumeCurrentVersion")
+  parent                ResumeVersion?         @relation("ResumeVersionParent", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  children              ResumeVersion[]        @relation("ResumeVersionParent")
+  targetJob             Job?                   @relation(fields: [targetJobId], references: [id], onDelete: SetNull)
+  factReferences        ResumeFactReference[]
+  checks                ResumeCheck[]
+  approvals             ResumeApproval[]
+  exports               ResumeExport[]
+  communications        Communication[]
+  communicationVersions CommunicationVersion[]
 
   @@unique([resumeId, versionNumber])
   @@index([userId, createdAt(sort: Desc)])
@@ -2052,4 +2069,289 @@ model AiPreferences {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ai_preferences")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 — Email & Cover Letter Studio (see docs/communication-studio.md)
+//   Communication assets are PREPARED here, never sent (no delivery exists in Phase 7).
+//   communications: user-owned container (EMAIL | COVER_LETTER) bound to a job/company.
+//   communication_versions: structured content (Zod), plain text, SHA-256 content hash and
+//     the exact generation context (resume version, requirement set = job version, research
+//     version, match version). APPROVED content is immutable (DB trigger).
+//   communication_claims / _claim_sources: every factual sentence → candidate facts,
+//     research claims (company facts) or user-provided context.
+//   communication_checks / _findings: deterministic quality results for a content hash.
+//   communication_approvals: exact-content approvals; revoked, never deleted.
+//   communication_exports: cover-letter PDF/DOCX and email TXT in private storage.
+//   signature_presets: reusable signatures; the user chooses which fields appear.
+// Closed value sets are CHECK constraints in the migration SQL.
+// ---------------------------------------------------------------------------
+
+model Communication {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  /// EMAIL | COVER_LETTER
+  kind                  String
+  /// APPLICATION_EMAIL | RECRUITER_OUTREACH | HIRING_MANAGER_OUTREACH | GENERAL_HR_OUTREACH |
+  /// NETWORKING_INTRODUCTION | PORTFOLIO_INTRODUCTION | CUSTOM_EMAIL | COVER_LETTER
+  communicationType     String    @map("communication_type")
+  title                 String
+  /// ACTIVE | ARCHIVED
+  status                String    @default("ACTIVE")
+  jobId                 String?   @map("job_id") @db.Uuid
+  companyId             String?   @map("company_id") @db.Uuid
+  /// Resume version the communication was written with (never silently rebound)
+  resumeVersionId       String?   @map("resume_version_id") @db.Uuid
+  /// RECRUITER | HIRING_MANAGER | HR | TEAM_MEMBER | GENERAL_COMPANY | UNKNOWN | CUSTOM
+  recipientType         String    @default("UNKNOWN") @map("recipient_type")
+  /// Recipient details are only ever what the USER entered — never inferred or discovered
+  recipientName         String?   @map("recipient_name")
+  recipientTitle        String?   @map("recipient_title")
+  recipientCompany      String?   @map("recipient_company")
+  recipientEmail        String?   @map("recipient_email")
+  /// Where the user got the recipient details (free text, user-provided)
+  recipientSource       String?   @map("recipient_source")
+  /// USER_PROVIDED | UNVERIFIED
+  recipientVerification String    @default("USER_PROVIDED") @map("recipient_verification")
+  /// NATURAL | PROFESSIONAL | WARM | DIRECT | CONFIDENT | CONCISE | FORMAL
+  tone                  String    @default("NATURAL")
+  /// SHORT | STANDARD | DETAILED
+  length                String    @default("STANDARD")
+  /// Cover letters: CLASSIC | MODERN | MINIMAL | EDITORIAL; emails: structure template key
+  template              String    @default("CLASSIC")
+  /// A4 | LETTER (cover letters)
+  pageFormat            String    @default("A4") @map("page_format")
+  signaturePresetId     String?   @map("signature_preset_id") @db.Uuid
+  /// Optional context typed by the user (USER_PROVIDED_CONTEXT, never externally verified)
+  userContext           String?   @map("user_context")
+  currentVersionId      String?   @unique @map("current_version_id") @db.Uuid
+  archivedAt            DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             Job?                   @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  company         Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  resumeVersion   ResumeVersion?         @relation(fields: [resumeVersionId], references: [id], onDelete: SetNull)
+  signaturePreset SignaturePreset?       @relation(fields: [signaturePresetId], references: [id], onDelete: SetNull)
+  currentVersion  CommunicationVersion?  @relation("CommunicationCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions        CommunicationVersion[] @relation("CommunicationVersions")
+
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@index([jobId])
+  @@index([companyId])
+  @@index([resumeVersionId])
+  @@index([signaturePresetId])
+  @@map("communications")
+}
+
+model CommunicationVersion {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  communicationId  String   @map("communication_id") @db.Uuid
+  versionNumber    Int      @map("version_number")
+  parentVersionId  String?  @map("parent_version_id") @db.Uuid
+  /// GENERATED | AI_ASSISTED | MANUAL_EDIT | RESTORED | DUPLICATED | IMPORTED
+  versionType      String   @map("version_type")
+  /// AI_GENERATED | AI_ASSISTED | USER_AUTHORED | IMPORTED | RESTORED
+  contentSource    String   @map("content_source")
+  /// DRAFT | READY_FOR_REVIEW | APPROVED | REJECTED | ARCHIVED
+  status           String   @default("DRAFT")
+  /// EmailDocument | CoverLetterDocument (src/modules/communications/document.ts), Zod-validated
+  content          Json
+  schemaVersion    Int      @default(1) @map("schema_version")
+  /// Clean plain-text rendering (Phase 8/10 will use this; never HTML)
+  plainText        String   @map("plain_text")
+  /// SHA-256 of the normalized content (approval identity)
+  contentHash      String   @map("content_hash") @db.Char(64)
+  /// Exact generation context of THIS version (locked; later versions of these never rebind it)
+  resumeVersionId  String?  @map("resume_version_id") @db.Uuid
+  /// Job version = the requirement set in effect
+  requirementSetId String?  @map("requirement_set_id") @db.Uuid
+  /// Research version used
+  jobResearchId    String?  @map("job_research_id") @db.Uuid
+  /// Match version used
+  matchId          String?  @map("match_id") @db.Uuid
+  /// SHA-256 of the context (candidate facts, job, resume, research, match, type, tone, length, user context)
+  contextHash      String?  @map("context_hash") @db.Char(64)
+  /// Generation metadata: method, provider, model, promptVersion, aiGenerationId (no prompts, no secrets)
+  generation       Json     @default("{}")
+  /// Diff metadata vs the parent version
+  changeSummary    Json     @default("{}") @map("change_summary")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communication  Communication           @relation("CommunicationVersions", fields: [communicationId], references: [id], onDelete: Cascade)
+  currentOf      Communication?          @relation("CommunicationCurrentVersion")
+  parent         CommunicationVersion?   @relation("CommunicationVersionParent", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  children       CommunicationVersion[]  @relation("CommunicationVersionParent")
+  resumeVersion  ResumeVersion?          @relation(fields: [resumeVersionId], references: [id], onDelete: SetNull)
+  requirementSet JobRequirementSet?      @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
+  jobResearch    JobResearch?            @relation(fields: [jobResearchId], references: [id], onDelete: SetNull)
+  match          JobMatch?               @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  claims         CommunicationClaim[]
+  checks         CommunicationCheck[]
+  approvals      CommunicationApproval[]
+  exports        CommunicationExport[]
+
+  @@unique([communicationId, versionNumber])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([parentVersionId])
+  @@index([resumeVersionId])
+  @@index([requirementSetId])
+  @@index([jobResearchId])
+  @@index([matchId])
+  @@map("communication_versions")
+}
+
+model CommunicationClaim {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  versionId String   @map("version_id") @db.Uuid
+  /// Location in the document, e.g. "body:2" or "subject"
+  location  String
+  text      String
+  /// CANDIDATE | COMPANY | USER_CONTEXT
+  claimKind String   @map("claim_kind")
+  /// SUPPORTED | PARTIALLY_SUPPORTED | UNSUPPORTED | UNKNOWN
+  status    String
+  reasons   Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user    User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version CommunicationVersion       @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  sources CommunicationClaimSource[]
+
+  @@index([versionId])
+  @@index([userId])
+  @@map("communication_claims")
+}
+
+model CommunicationClaimSource {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  userId          String  @map("user_id") @db.Uuid
+  claimId         String  @map("claim_id") @db.Uuid
+  /// CANDIDATE_FACT | RESEARCH_CLAIM | USER_CONTEXT
+  sourceKind      String  @map("source_kind")
+  /// Candidate fact reference "<kind>:<uuid>" (CANDIDATE_FACT)
+  factRef         String? @map("fact_ref")
+  /// Research claim (company fact with its own sources) (RESEARCH_CLAIM)
+  researchClaimId String? @map("research_claim_id") @db.Uuid
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  claim         CommunicationClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  researchClaim ResearchClaim?     @relation(fields: [researchClaimId], references: [id], onDelete: SetNull)
+
+  @@index([claimId])
+  @@index([userId])
+  @@index([researchClaimId])
+  @@map("communication_claim_sources")
+}
+
+model CommunicationCheck {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  versionId      String   @map("version_id") @db.Uuid
+  /// Content hash that was checked (stale when the version hash differs)
+  contentHash    String   @map("content_hash") @db.Char(64)
+  checkerVersion String   @map("checker_version")
+  /// { critical, warnings, info, passed, byCategory }
+  summary        Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user     User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version  CommunicationVersion        @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  findings CommunicationCheckFinding[]
+
+  @@index([versionId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("communication_checks")
+}
+
+model CommunicationCheckFinding {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  userId         String  @map("user_id") @db.Uuid
+  checkId        String  @map("check_id") @db.Uuid
+  /// ACCURACY | RELEVANCE | WRITING | COMPLETENESS | LENGTH | CONSISTENCY | PERSONALIZATION
+  category       String
+  code           String
+  /// PASS | INFO | WARNING | CRITICAL
+  severity       String
+  message        String
+  recommendation String?
+  location       String?
+  evidence       Json    @default("{}")
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  check CommunicationCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@index([checkId])
+  @@index([userId])
+  @@map("communication_check_findings")
+}
+
+model CommunicationApproval {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  versionId       String    @map("version_id") @db.Uuid
+  /// Exact content that was approved
+  contentHash     String    @map("content_hash") @db.Char(64)
+  /// Validation state at approval time (claims + check summary)
+  validationState Json      @default("{}") @map("validation_state")
+  approvedAt      DateTime  @default(now()) @map("approved_at") @db.Timestamptz(3)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokeReason    String?   @map("revoke_reason")
+
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version CommunicationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([userId])
+  @@map("communication_approvals")
+}
+
+model CommunicationExport {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  versionId       String    @map("version_id") @db.Uuid
+  /// PDF | DOCX | TXT
+  format          String
+  /// PENDING | SUCCEEDED | FAILED
+  status          String    @default("PENDING")
+  template        String
+  pageFormat      String    @map("page_format")
+  contentHash     String    @map("content_hash") @db.Char(64)
+  matchesApproval Boolean   @default(false) @map("matches_approval")
+  storagePath     String?   @map("storage_path")
+  fileName        String?   @map("file_name")
+  byteSize        Int?      @map("byte_size")
+  fileSha256      String?   @map("file_sha256") @db.Char(64)
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version CommunicationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("communication_exports")
+}
+
+model SignaturePreset {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  /// Signature fields chosen by the user: name, email, phone, location, linkedin, portfolio, website
+  fields    Json     @default("{}")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@index([userId])
+  @@map("signature_presets")
 }

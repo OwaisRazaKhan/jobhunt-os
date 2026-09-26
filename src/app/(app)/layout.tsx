@@ -6,6 +6,7 @@ import {
   FileText,
   Gauge,
   ListChecks,
+  Mail,
   Play,
   Plug,
   Radar,
@@ -98,6 +99,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </p>
           <NavLink href="/resumes">
             <ScrollText className="size-4" aria-hidden /> Resume Studio
+          </NavLink>
+          <NavLink href="/communications">
+            <Mail className="size-4" aria-hidden /> Communication Studio
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System
