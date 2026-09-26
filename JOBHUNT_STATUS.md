@@ -14,7 +14,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
 | Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
-| Migrations          | 11 in the repo, all applied on JOBHUNTOS (latest `20261012000000_ai_orchestration`)                                                                                             |
+| Migrations          | 12 in the repo, all applied on JOBHUNTOS (latest `20261015000000_advisor_fixes`)                                                                                                |
 | Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
 | AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
@@ -34,7 +34,8 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Database (JOBHUNTOS, verified live)
 
-- 63 tables (7 added in Phase 6), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- 64 tables, **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- Supabase advisor lints (re-checked 2026-09-26 with read-only catalog queries — the Supabase MCP was not available in the session): security and performance findings **all resolved** by `20261015000000_advisor_fixes` (32 FK indexes, pinned trigger `search_path`, no multiple permissive policies); guarded by `tests/integration/advisors.test.ts`.
 - App role `jobhunt_app`: NOLOGIN, NOBYPASSRLS; every user-owned table has an owner policy
   `user_id = app_current_user_id()`. Shared catalog tables (jobs, companies, postings, requirement sets)
   follow job visibility. Better Auth tables have no app policies (owner client only).

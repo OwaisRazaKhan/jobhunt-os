@@ -254,6 +254,8 @@ model CandidateProfile {
   currentCountry Country?   @relation(fields: [currentCountryCode], references: [code])
   jobMatches     JobMatch[]
 
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([currentCountryCode])
   @@map("candidate_profiles")
 }
 
@@ -290,6 +292,8 @@ model CandidateEducation {
   sourceDocument CandidateDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_education")
 }
 
@@ -323,6 +327,8 @@ model CandidateExperience {
   achievements   CandidateAchievement[]
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_experiences")
 }
 
@@ -363,6 +369,8 @@ model CandidateProject {
   portfolioItems CandidatePortfolioItem[]
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_projects")
 }
 
@@ -393,6 +401,12 @@ model CandidateAchievement {
   sourceDocument CandidateDocument?   @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([experienceId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([projectId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_achievements")
 }
 
@@ -422,6 +436,8 @@ model CandidateSkill {
 
   // Partial unique index (user_id, name_normalized) WHERE deleted_at IS NULL is added in SQL.
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_skills")
 }
 
@@ -450,6 +466,8 @@ model CandidateCertification {
   sourceDocument CandidateDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_certifications")
 }
 
@@ -479,6 +497,10 @@ model CandidatePortfolioItem {
   sourceDocument CandidateDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([projectId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_portfolio_items")
 }
 
@@ -508,6 +530,8 @@ model CandidateLanguage {
   sourceDocument CandidateDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_languages")
 }
 
@@ -537,6 +561,10 @@ model CandidateWorkAuthorization {
   sourceDocument CandidateDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([userId, deletedAt])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([countryCode])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([sourceDocumentId])
   @@map("candidate_work_authorizations")
 }
 
@@ -581,6 +609,8 @@ model CandidateTargetLocation {
   country Country @relation(fields: [countryCode], references: [code])
 
   @@index([userId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([countryCode])
   @@map("candidate_target_locations")
 }
 
@@ -654,6 +684,8 @@ model CandidateFactCandidate {
 
   @@index([userId, status])
   @@index([documentId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([aiGenerationId])
   @@map("candidate_fact_candidates")
 }
 
@@ -1330,6 +1362,10 @@ model JobMatch {
   @@index([userId, overallStatus])
   @@index([jobId])
   @@index([candidateId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([aiGenerationId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([requirementSetId])
   @@map("job_matches")
 }
 
@@ -1545,6 +1581,12 @@ model ResearchRun {
   @@index([userId, createdAt(sort: Desc)], map: "research_runs_user_created_idx")
   @@index([userId, jobId, createdAt(sort: Desc)], map: "research_runs_job_idx")
   @@index([userId, companyId, createdAt(sort: Desc)], map: "research_runs_company_idx")
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([aiGenerationId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([companyId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([jobId])
   @@map("research_runs")
 }
 
@@ -1583,6 +1625,10 @@ model ResearchSource {
   @@index([userId, normalizedUrl, createdAt(sort: Desc)], map: "research_sources_user_url_idx")
   @@index([userId, companyId], map: "research_sources_company_idx")
   @@index([userId, jobId], map: "research_sources_job_idx")
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([companyId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([jobId])
   @@map("research_sources")
 }
 
@@ -1618,6 +1664,10 @@ model CompanyResearch {
   jobResearch JobResearch[]
 
   @@unique([userId, companyId, version], map: "company_research_version_key")
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([companyId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([runId])
   @@map("company_research")
 }
 
@@ -1659,6 +1709,16 @@ model JobResearch {
 
   @@unique([userId, jobId, version], map: "job_research_version_key")
   @@index([userId, companyId], map: "job_research_company_idx")
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([companyId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([companyResearchId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([jobId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([requirementSetId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([runId])
   @@map("job_research")
 }
 
@@ -1748,6 +1808,10 @@ model ResearchNote {
 
   @@index([userId, companyId], map: "research_notes_user_company_idx")
   @@index([userId, jobId], map: "research_notes_user_job_idx")
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([companyId])
+  /// FK index (Supabase advisor: unindexed_foreign_keys)
+  @@index([jobId])
   @@map("research_notes")
 }
 

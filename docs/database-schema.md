@@ -4,6 +4,10 @@ Status: **design — not yet migrated.** Tables are created in the phase listed 
 
 ---
 
+## 000. Supabase advisor fixes
+
+Migration `20261015000000_advisor_fixes` (no data changes): 32 foreign-key indexes (`unindexed_foreign_keys`), pinned `search_path` on `resume_versions_protect_approved` (`function_search_path_mutable`), and the FOR ALL "own/write" policies on `market_locations`, `job_categories`, `job_category_terms`, `job_category_assignments`, `job_requirement_sets`, `job_requirements` split into INSERT/UPDATE/DELETE policies with identical expressions (`multiple_permissive_policies`; reads now evaluate one policy, access unchanged). Regression test: `tests/integration/advisors.test.ts` re-runs these lints against the migration chain.
+
 ## 00. Phase 6 Resume Studio
 
 Migration `20261010000000_phase6_resume_studio`: `resumes`, `resume_versions` (canonical ResumeDocument JSON + SHA-256 `content_hash`; trigger `resume_versions_protect_approved` makes APPROVED content immutable), `resume_fact_references`, `resume_checks`, `resume_check_findings`, `resume_approvals` (one active per version), `resume_exports` (user-scoped storage path CHECK). All owner-only RLS; no DELETE grant on history tables. Details: [resume-studio.md](./resume-studio.md).
