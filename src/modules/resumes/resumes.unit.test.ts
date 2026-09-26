@@ -267,6 +267,20 @@ describe("claim validation", () => {
     expect(r.status).toBe("UNSUPPORTED");
     expect(r.unsupported.join(" ")).toContain(bad);
   });
+  it("a sentence-final period does not turn a known name into an unknown one", () => {
+    const facts = {
+      texts: ["Reported campaign results in Google Analytics and Node.js dashboards"],
+    };
+    expect(validateClaim("Reported campaign results in Google Analytics.", facts).status).toBe(
+      "SUPPORTED",
+    );
+    expect(validateClaim("Reported campaign results in Node.js dashboards.", facts).status).toBe(
+      "SUPPORTED",
+    );
+    expect(
+      validateClaim("Reported campaign results in Google Analytics at Microsoft.", facts).status,
+    ).toBe("PARTIALLY_SUPPORTED");
+  });
   it("flags unknown names and drifting wording for review, and UNKNOWN without facts", () => {
     expect(
       validateClaim("Built Zapier workflows for lead routing at Microsoft", support).status,

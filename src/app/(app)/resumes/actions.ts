@@ -22,6 +22,7 @@ import {
 } from "@/modules/resumes/resume.service";
 import { tailorResumeToJob } from "@/modules/resumes/tailor.service";
 import { tailoringOptionsSchema } from "@/modules/resumes/tailor";
+import { confirmSkillsForJob } from "@/modules/resumes/readiness.service";
 import { runAction } from "@/server/action";
 import { toAppError } from "@/server/errors";
 import { requireActor } from "@/server/session";
@@ -318,6 +319,7 @@ export async function tailorResumeAction(
       includeProjects: formData.get("includeProjects") === "on",
       includeLinks: formData.get("includeLinks") === "on",
       useAi: formData.get("useAi") === "on",
+      rewriteDepth: formData.get("rewriteDepth") || undefined,
     });
     const result = await tailorResumeToJob(actor, { ...base, options });
     revalidate(result.resumeId);
@@ -335,6 +337,24 @@ export async function tailorResumeAction(
         needsReview: result.changeSet.needsReview.length,
         quality: result.qualityReport,
       },
+    };
+  });
+}
+
+/** The candidate confirms skills they HAVE from this job's missing list → saved as their own facts. */
+export async function confirmSkillsAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const actor = await requireActor();
+    const jobId = id.parse(formData.get("jobId"));
+    const requirementIds = formData.getAll("requirementId").map((v) => id.parse(v));
+    const added = await confirmSkillsForJob(actor, jobId, requirementIds);
+    revalidatePath("/resumes/tailor");
+    revalidatePath("/candidate");
+    return {
+      message: `Added to your profile as skills you entered: ${added.join(", ")}. Now tailor the resume — they will be included.`,
     };
   });
 }

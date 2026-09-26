@@ -94,7 +94,7 @@ export const TASKS: Record<AiTask, TaskPolicy> = {
     structuredOutputRequired: true,
     fallback: "deterministic",
     maxRetries: 1,
-    maxOutputTokens: 4000,
+    maxOutputTokens: 8000,
     untrustedContent: true,
     cacheable: false,
     description:

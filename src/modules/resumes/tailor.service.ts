@@ -123,6 +123,8 @@ export async function tailorResumeToJob(actor: ActorRef, raw: TailorInput): Prom
       options,
       TAILOR_ENGINE_VERSION,
       ctx.requirements.map((r) => r.id),
+      // New or changed profile facts (e.g. a skill you just confirmed) → a new tailored draft.
+      sha256Hex(JSON.stringify(facts.map((f) => [f.ref, f.value]))),
     ]),
   );
   const existing = await withUserContext(actor.userId, (t) =>
@@ -187,7 +189,9 @@ export async function tailorResumeToJob(actor: ActorRef, raw: TailorInput): Prom
   let aiStatus: TailorResult["aiStatus"] = "NOT_REQUESTED";
   const wantsAi =
     options.useAi &&
-    (options.summaryMode !== "preserve" || options.keywordAlignment !== "conservative");
+    (options.rewriteDepth === "full" ||
+      options.summaryMode !== "preserve" ||
+      options.keywordAlignment !== "conservative");
   const aiRoute = wantsAi ? await getAiRoute(actor.userId, "resume.tailor") : null;
   if (wantsAi && aiRoute && !aiRoute.steps.length) {
     aiStatus = "UNAVAILABLE";

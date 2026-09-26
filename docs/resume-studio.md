@@ -70,6 +70,32 @@ workflow node. Steps (with real timings in `stages`):
 Missing requirements are reported ("not in your verified profile — it will not be added"), never
 inserted.
 
+### 3.1 Complete rewrite, missing skills, pass gate (`tailor-2`)
+
+- **Rewrite depth** (`options.rewriteDepth`, default **full**): the AI rewrites the summary and
+  **every** visible bullet for the job — its priorities first, its terminology where the cited facts
+  support it. Every rewrite still goes through claim validation (§3 step 5); unsupported wording
+  (e.g. a skill you don't have) is rejected and listed. `targeted` keeps the old behaviour.
+- **Profile skills the job asks for** are added to the tailored resume even when the source resume
+  did not list them — only from usable facts, with `origin: FACT` and the fact reference.
+- **Missing skills** (`readiness.service.ts → missingSkillsForJob / confirmSkillsForJob`): the
+  tailoring page lists the job's skill requirements that no usable fact mentions. The candidate
+  ticks the ones they genuinely have; each becomes a USER_PROVIDED skill fact (normal manual entry,
+  audited) and the next tailoring run includes it. Only skills the job lists can be confirmed.
+  Skills are **never** added without that explicit confirmation.
+- **Idempotency** includes a fingerprint of the usable facts, so a newly confirmed skill produces a
+  new tailored draft.
+- **Pass gate** (`getReadiness`, enforced in `approveVersion` and shown on `/resumes/[id]`). A
+  job-tailored version can be approved only when:
+  1. no REQUIRED requirement is a GAP or hard block for the profile (Phase 4 engine — experience
+     years from dated roles, education level, skills via the lexicon);
+  2. every REQUIRED skill the profile supports is shown in the resume;
+  3. the Resume Check for this exact content has no ISSUE;
+  4. no visible statement is UNSUPPORTED.
+
+  Unknown/unverified requirements are warnings. Later phases only consume approved versions, so a
+  resume that does not pass cannot be used.
+
 ## 4. Resume Check (`check.ts`, `check.service.ts`)
 
 Deterministic findings — PASS · INFO · OPPORTUNITY · WARNING · ISSUE — in STRUCTURE, CONTENT,

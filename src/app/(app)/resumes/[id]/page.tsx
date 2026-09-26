@@ -12,6 +12,7 @@ import {
   STATUS_LABELS,
   type VersionStatus,
 } from "@/modules/resumes/resume.service";
+import { getReadiness } from "@/modules/resumes/readiness.service";
 import type { ChangeSet } from "@/modules/resumes/tailor";
 import { PAGE_SIZES, TEMPLATES } from "@/modules/resumes/templates";
 import { ago, STATUS_TONES } from "@/modules/resumes/ui/labels";
@@ -67,6 +68,11 @@ export default async function ResumePage({ params, searchParams }: PageProps<"/r
     description: t.description,
   }));
   const formats = Object.entries(PAGE_SIZES).map(([key, s]) => ({ key, label: s.label }));
+  // Pass/fail gate for job-tailored versions awaiting approval (same check approval enforces).
+  const readiness =
+    version.targetJobId && ["DRAFT", "READY_FOR_REVIEW"].includes(status) && !readOnly
+      ? await getReadiness(actor, version.id).catch(() => null)
+      : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -285,6 +291,45 @@ export default async function ResumePage({ params, searchParams }: PageProps<"/r
               <code className="text-fg font-mono">{version.contentHash.slice(0, 12)}…</code>
               {activeApproval && <> · approved {ago(activeApproval.approvedAt)}</>}
             </p>
+            {readiness && (
+              <div
+                className={`rounded-md border px-3 py-2 ${readiness.ready ? "border-success/40 bg-success/5" : "border-danger/40 bg-danger/5"}`}
+                role="status"
+              >
+                <p className={`font-medium ${readiness.ready ? "text-success" : "text-danger"}`}>
+                  {readiness.ready
+                    ? "✓ Passes: meets the job's required requirements, Resume Check clean, every statement supported."
+                    : `✗ Does not pass yet — approval is blocked (${readiness.blockers.length})`}
+                </p>
+                {!readiness.ready && (
+                  <ul className="text-fg mt-1 list-disc pl-4">
+                    {readiness.blockers.slice(0, 8).map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+                )}
+                {readiness.warnings.length > 0 && (
+                  <ul className="text-fg-muted mt-1 list-disc pl-4">
+                    {readiness.warnings.slice(0, 4).map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                )}
+                {!readiness.ready && job && (
+                  <p className="text-fg-muted mt-1">
+                    Fix: confirm skills you have on{" "}
+                    <Link href={`/resumes/tailor?job=${job.id}`} className="underline">
+                      the tailoring page
+                    </Link>
+                    , add missing experience or contact details in your{" "}
+                    <Link href="/candidate" className="underline">
+                      profile
+                    </Link>{" "}
+                    (then tailor again), or edit the resume for Resume Check items.
+                  </p>
+                )}
+              </div>
+            )}
             {!readOnly && (
               <div className="flex flex-wrap gap-1.5">
                 {status === "DRAFT" && (

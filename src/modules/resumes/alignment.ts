@@ -146,6 +146,12 @@ export function requirementTerms(r: AlignRequirement): {
   return { skillKey: null, terms: named.length ? named : [r.text] };
 }
 
+/** Does this text express the requirement (lexicon skill key or its own terms)? */
+export function textMentionsRequirement(text: string, r: AlignRequirement): boolean {
+  const { skillKey, terms } = requirementTerms(r);
+  return mentions(text, skillKey, terms);
+}
+
 function mentions(text: string, skillKey: string | null, terms: string[]): boolean {
   if (skillKey) {
     if (findSkills(text).some((s) => s.key === skillKey)) return true;

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/primitives";
 import { INITIAL_ACTION_STATE, type ActionState } from "@/lib/action-state";
 import { cn } from "@/lib/cn";
 import {
+  confirmSkillsAction,
   createResumeAction,
   tailorResumeAction,
   updateResumeSettingsAction,
@@ -222,6 +223,15 @@ export function TailorForm({
 
       <fieldset className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <legend className="text-fg mb-1 text-[13px] font-semibold">2. Tailoring behaviour</legend>
+        <label className="flex flex-col gap-1 text-xs sm:col-span-2">
+          <span className="text-fg-muted font-medium">Rewrite</span>
+          <select name="rewriteDepth" defaultValue="full" className={inputClass}>
+            <option value="full">
+              Complete rewrite for this job — summary and every bullet (AI, fact-checked)
+            </option>
+            <option value="targeted">Targeted — only bullets that clearly improve</option>
+          </select>
+        </label>
         <label className="flex flex-col gap-1 text-xs">
           <span className="text-fg-muted font-medium">Keyword alignment</span>
           <select name="keywordAlignment" defaultValue="balanced" className={inputClass}>
@@ -354,6 +364,62 @@ export function TailorForm({
           </div>
         </div>
       )}
+    </form>
+  );
+}
+
+/**
+ * "Do you have these skills?" — the job lists them but your profile does not. Ticking one saves it
+ * to your candidate profile as a skill YOU entered (never added silently, never invented).
+ */
+export function ConfirmSkillsForm({
+  jobId,
+  missing,
+}: {
+  jobId: string;
+  missing: { requirementId: string; name: string; requirementType: string }[];
+}) {
+  const [state, action, pending] = useActionState(confirmSkillsAction, INITIAL_ACTION_STATE);
+  if (!missing.length)
+    return (
+      <p className="text-success text-xs" role="status">
+        {state.ok && state.message ? `${state.message} ` : ""}✓ Every skill this job lists is in
+        your profile.
+      </p>
+    );
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="jobId" value={jobId} />
+      <p className="text-fg-muted text-xs">
+        Tick only skills you genuinely have. They are saved to your profile as facts you entered,
+        and the next tailoring run includes them. Skills you don&apos;t have stay listed as gaps —
+        they are never added to your resume.
+      </p>
+      <ul className="flex flex-col gap-1">
+        {missing.map((m) => (
+          <li key={m.requirementId}>
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                name="requirementId"
+                value={m.requirementId}
+                className="size-4 accent-[var(--accent)]"
+              />
+              <span className="text-fg">{m.name}</span>
+              <Badge tone={m.requirementType === "REQUIRED" ? "danger" : "info"}>
+                {m.requirementType === "REQUIRED" ? "required" : "preferred"}
+              </Badge>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? "Saving…" : "I have these — add to my profile"}
+        </Button>
+        {state.error && <span className="text-danger text-xs">{state.error}</span>}
+        {state.ok && state.message && <span className="text-success text-xs">{state.message}</span>}
+      </div>
     </form>
   );
 }

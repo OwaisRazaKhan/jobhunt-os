@@ -66,7 +66,8 @@ function namedTokens(text: string): string[] {
   for (const sentence of sentences) {
     const words = sentence.split(/\s+/).filter(Boolean);
     words.forEach((w, i) => {
-      const clean = w.replace(/^[^\p{L}\d]+|[^\p{L}\d.+#]+$/gu, "");
+      // Keep internal "." ("Node.js") but drop a sentence-final one ("…Google Analytics.").
+      const clean = w.replace(/^[^\p{L}\d]+|[^\p{L}\d.+#]+$/gu, "").replace(/\.+$/, "");
       if (
         i > 0 &&
         /^\p{Lu}[\p{L}\d.+#&-]{1,}$/u.test(clean) &&

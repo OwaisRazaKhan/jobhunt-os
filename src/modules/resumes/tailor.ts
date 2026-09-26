@@ -4,16 +4,23 @@
  * carries a reason. The source (master) document is never mutated — a new document is built.
  */
 import { z } from "zod";
-import { scoreRelevance, type AlignFact, type AlignRequirement, factText } from "./alignment";
+import {
+  scoreRelevance,
+  textMentionsRequirement,
+  type AlignFact,
+  type AlignRequirement,
+  factText,
+} from "./alignment";
 import { validateClaim } from "./claims";
 import {
+  newItemId,
   parseResumeDocument,
   type ClaimStatus,
   type ResumeDocument,
   type SectionKey,
 } from "./document";
 
-export const TAILOR_ENGINE_VERSION = "tailor-1";
+export const TAILOR_ENGINE_VERSION = "tailor-2";
 
 export const tailoringOptionsSchema = z.object({
   emphasis: z.enum(["balanced", "skills", "experience", "projects"]).default("balanced"),
@@ -24,6 +31,11 @@ export const tailoringOptionsSchema = z.object({
   includeLinks: z.boolean().default(true),
   /** Use the local AI for wording (summary/bullets). Deterministic tailoring runs regardless. */
   useAi: z.boolean().default(true),
+  /**
+   * full: the AI rewrites the summary and EVERY visible bullet for this job (each rewrite still
+   * claim-validated against its facts). targeted: only bullets that can be clearly improved.
+   */
+  rewriteDepth: z.enum(["targeted", "full"]).default("full"),
 });
 export type TailoringOptions = z.output<typeof tailoringOptionsSchema>;
 
@@ -287,6 +299,48 @@ export function tailorDeterministic(
     });
   }
 
+  // 4b. Skills the job asks for that are in your PROFILE (verified / entered by you) but missing
+  //     from the source resume are added — they are real facts, never invented.
+  const docSkillNames = new Set(
+    doc.skills.flatMap((g) => g.skills.map((s) => s.name.trim().toLowerCase())),
+  );
+  const added: ResumeDocument["skills"][number]["skills"] = [];
+  for (const r of contentReqs) {
+    for (const f of ctx.facts.filter((x) => x.kind === "skill")) {
+      const name = typeof f.value.name === "string" ? f.value.name.trim() : "";
+      if (!name || docSkillNames.has(name.toLowerCase())) continue;
+      if (!textMentionsRequirement(name, r)) continue;
+      docSkillNames.add(name.toLowerCase());
+      const skill = {
+        id: newItemId("sk"),
+        name,
+        hidden: false,
+        factRefs: [f.ref],
+        origin: "FACT" as const,
+        claimStatus: "SUPPORTED" as const,
+        editedAt: null,
+      };
+      added.push(skill);
+      changes.push({
+        section: "skills",
+        itemId: skill.id,
+        kind: "SHOWN",
+        label: `Skill "${name}" added from your profile`,
+        before: null,
+        after: name,
+        reason: `The job lists "${r.text}" (${r.requirementType.toLowerCase()}); it is in your profile, so it is shown.`,
+        supportingFactRefs: [f.ref],
+      });
+    }
+  }
+  if (added.length) {
+    const target = doc.skills.find((g) => !g.hidden);
+    if (target) target.skills = [...added, ...target.skills];
+    else doc.skills.unshift({ id: newItemId("sg"), hidden: false, label: "Skills", skills: added });
+    const section = doc.sections.find((s) => s.key === "skills");
+    if (section) section.visible = true;
+  }
+
   // 5. Section order by emphasis (content unchanged).
   const order = (keys: SectionKey[]) => {
     const current = doc.sections.map((s) => s.key);
@@ -395,7 +449,7 @@ export const aiTailorOutputSchema = z.strictObject({
         supportingFactRefs: z.array(z.string()).min(1).max(8),
       }),
     )
-    .max(24)
+    .max(60)
     .default([]),
   warnings: z.array(z.string().max(300)).max(10).default([]),
 });
@@ -466,10 +520,12 @@ export function buildTailorPrompt(input: {
     "",
     "<task>",
     `Keyword alignment: ${input.options.keywordAlignment}. Summary mode: ${input.options.summaryMode}.`,
-    input.options.summaryMode === "preserve"
+    input.options.summaryMode === "preserve" && input.options.rewriteDepth !== "full"
       ? "Do not write a summary (return summary: null)."
-      : "Write a concise 2–3 sentence summary grounded only in the cited facts, relevant to this job.",
-    "Rewrite at most the bullets that can be made clearer or more relevant using ONLY what their cited facts say. Keep each under 220 characters.",
+      : "Write a concise 2–3 sentence summary for THIS job, grounded only in the cited facts: lead with the experience and skills the job asks for.",
+    input.options.rewriteDepth === "full"
+      ? "FULL REWRITE: rewrite EVERY bullet listed in <resume_items> so the whole resume reads as written for this job — lead each bullet with what this job values, use the job's terminology wherever the cited facts support it, start with a strong action verb, be concrete. Each rewrite must stay true to its cited facts. Keep each under 220 characters."
+      : "Rewrite at most the bullets that can be made clearer or more relevant using ONLY what their cited facts say. Keep each under 220 characters.",
     "Give a short reason for each change.",
     "</task>",
   ].join("\n");

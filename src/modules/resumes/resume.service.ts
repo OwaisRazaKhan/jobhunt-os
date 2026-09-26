@@ -827,6 +827,15 @@ export async function setVersionStatus(
  * enforced by a partial unique index). Unsupported visible claims block approval.
  */
 export async function approveVersion(actor: ActorRef, versionId: string, expectedHash: string) {
+  // Readiness gate for tailored versions: nothing that fails the job's requirements, the Resume
+  // Check or claim validation can be approved (and therefore used by any later phase).
+  const { getReadiness } = await import("./readiness.service");
+  const readiness = await getReadiness(actor, versionId);
+  if (!readiness.ready) {
+    throw new AppError("VALIDATION_ERROR", {
+      publicMessage: `Not ready for approval — ${readiness.blockers.length} check${readiness.blockers.length === 1 ? "" : "s"} did not pass: ${readiness.blockers.slice(0, 3).join(" · ")}${readiness.blockers.length > 3 ? " …" : ""}`,
+    });
+  }
   return withUserContext(actor.userId, async (t) => {
     const version = await ownedVersion(t, actor, versionId);
     assertActive(version.resume);

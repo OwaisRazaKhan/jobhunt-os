@@ -6,7 +6,8 @@ import { isUuid } from "@/lib/ids";
 import { listResumes } from "@/modules/resumes/resume.service";
 import { getTailoringPreview } from "@/modules/resumes/tailor.service";
 import { ALIGNMENT_LABELS, ALIGNMENT_TONES } from "@/modules/resumes/ui/labels";
-import { TailorForm } from "@/modules/resumes/ui/resume-controls";
+import { missingSkillsForJob } from "@/modules/resumes/readiness.service";
+import { ConfirmSkillsForm, TailorForm } from "@/modules/resumes/ui/resume-controls";
 import { AppError } from "@/server/errors";
 import { requireActorOrRedirect } from "@/server/session";
 
@@ -54,6 +55,7 @@ export default async function TailorPage({ searchParams }: PageProps<"/resumes/t
     throw error;
   }
   const { ctx, alignment, aiConfigured } = preview;
+  const missingSkills = await missingSkillsForJob(actor, jobId);
   const content = ctx.requirements.filter(
     (r) =>
       !["LOCATION", "WORK_MODE", "EMPLOYMENT", "SALARY", "AUTHORIZATION"].includes(r.category) &&
@@ -92,6 +94,21 @@ export default async function TailorPage({ searchParams }: PageProps<"/resumes/t
           </Link>{" "}
           from your candidate facts first.
         </Alert>
+      )}
+      {content.some((r) => r.category === "SKILL") && (
+        <Card>
+          <CardHeader
+            title="Skills this job asks for"
+            description={
+              missingSkills.length
+                ? "Not in your profile yet. Confirm the ones you have before tailoring; the rest stay honest gaps."
+                : "All of them are in your profile."
+            }
+          />
+          <div className="px-4 py-3">
+            <ConfirmSkillsForm jobId={jobId} missing={missingSkills} />
+          </div>
+        </Card>
       )}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
@@ -162,8 +179,9 @@ export default async function TailorPage({ searchParams }: PageProps<"/resumes/t
               </p>
             )}
             <p className="text-fg-subtle">
-              Requirements marked “Not in profile” will not be added to the resume. If you do have
-              them, add them to your candidate profile first.
+              Requirements marked “Not in profile” are never added on their own. If you have a
+              missing skill, confirm it above; other gaps (experience, education) are added in your
+              candidate profile.
             </p>
           </div>
         </Card>
