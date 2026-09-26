@@ -1,6 +1,7 @@
 import {
   Activity,
   Briefcase,
+  Building2,
   FileSearch,
   FileText,
   Gauge,
@@ -81,6 +82,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </p>
           <NavLink href="/matches">
             <Gauge className="size-4" aria-hidden /> Matches
+          </NavLink>
+          <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
+            Research
+          </p>
+          <NavLink href="/research">
+            <FileSearch className="size-4" aria-hidden /> Research
+          </NavLink>
+          <NavLink href="/companies">
+            <Building2 className="size-4" aria-hidden /> Companies
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System

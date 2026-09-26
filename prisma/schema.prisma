@@ -126,6 +126,16 @@ model User {
   matchRequirementResults JobMatchRequirementResult[]
   matchBatches            MatchBatch[]
   matchingPreferences     MatchingPreferences?
+  companyResearchTargets  CompanyResearchTarget[]
+  researchSettings        ResearchSettings?
+  researchRuns            ResearchRun[]
+  researchSources         ResearchSource[]
+  companyResearch         CompanyResearch[]
+  jobResearch             JobResearch[]
+  researchClaims          ResearchClaim[]
+  researchClaimEvidence   ResearchClaimEvidence[]
+  researchRunSources      ResearchRunSource[]
+  researchNotes           ResearchNote[]
 
   @@map("users")
 }
@@ -666,6 +676,7 @@ model AiGeneration {
   user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   jobMatches     JobMatch[]
   factCandidates CandidateFactCandidate[]
+  researchRuns   ResearchRun[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@map("ai_generations")
@@ -741,14 +752,26 @@ model JobSource {
 // ---------------------------------------------------------------------------
 
 model Company {
-  id             String   @id @default(uuid(7)) @db.Uuid
-  name           String
+  id                String   @id @default(uuid(7)) @db.Uuid
+  name              String
   /// Lower-cased, punctuation/legal-suffix stripped (src/lib/text-normalize.ts)
-  nameNormalized String   @unique @map("name_normalized")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  nameNormalized    String   @unique @map("name_normalized")
+  /// System-derived only (public job/application URL on a non-ATS host, or search). Users confirm their own in company_research_targets.
+  officialWebsite   String?  @map("official_website")
+  /// UNKNOWN | CONFIRMED | LIKELY | UNCERTAIN
+  websiteConfidence String   @default("UNKNOWN") @map("website_confidence")
+  /// JOB_URL | APPLICATION_URL | SEARCH
+  websiteSource     String?  @map("website_source")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  jobs Job[]
+  jobs            Job[]
+  researchTargets CompanyResearchTarget[]
+  researchRuns    ResearchRun[]
+  researchSources ResearchSource[]
+  companyResearch CompanyResearch[]
+  jobResearch     JobResearch[]
+  researchNotes   ResearchNote[]
 
   @@map("companies")
 }
@@ -828,6 +851,10 @@ model Job {
   duplicateOf         JobDuplicateCandidate[] @relation("DuplicateCandidateJob")
   duplicatedBy        JobDuplicateCandidate[] @relation("DuplicateCandidateOriginal")
   userStates          UserJobState[]
+  researchRuns        ResearchRun[]
+  researchSources     ResearchSource[]
+  jobResearch         JobResearch[]
+  researchNotes       ResearchNote[]
 
   @@index([createdByUserId, deletedAt, createdAt(sort: Desc)])
   @@index([visibility, status])
@@ -1230,6 +1257,7 @@ model JobRequirementSet {
   job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
   requirements JobRequirement[]
   matches      JobMatch[]
+  jobResearch  JobResearch[]
 
   @@unique([jobId, version])
   @@map("job_requirement_sets")
@@ -1418,4 +1446,286 @@ model MatchingPreferences {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("matching_preferences")
+}
+
+// --- Phase 5: Company & Job Research (all user-scoped, owner-only RLS) -----------------------
+
+model CompanyResearchTarget {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  websiteUrl String?  @map("website_url")
+  careersUrl String?  @map("careers_url")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId], map: "company_research_targets_user_company_key")
+  @@index([companyId])
+  @@map("company_research_targets")
+}
+
+model ResearchSettings {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  defaultDepth String   @default("STANDARD") @map("default_depth")
+  freshDays    Int      @default(14) @map("fresh_days")
+  staleDays    Int      @default(45) @map("stale_days")
+  aiSynthesis  Boolean  @default(false) @map("ai_synthesis")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("research_settings")
+}
+
+model ResearchRun {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  /// JOB | COMPANY
+  kind              String
+  companyId         String    @map("company_id") @db.Uuid
+  jobId             String?   @map("job_id") @db.Uuid
+  depth             String
+  trigger           String    @default("MANUAL")
+  status            String    @default("QUEUED")
+  steps             Json      @default("[]")
+  sourcesAttempted  Int       @default(0) @map("sources_attempted")
+  sourcesSuccessful Int       @default(0) @map("sources_successful")
+  sourcesFailed     Int       @default(0) @map("sources_failed")
+  requestsMade      Int       @default(0) @map("requests_made")
+  claimsCreated     Int       @default(0) @map("claims_created")
+  claimsRejected    Int       @default(0) @map("claims_rejected")
+  aiUsed            Boolean   @default(false) @map("ai_used")
+  aiProvider        String?   @map("ai_provider")
+  aiModel           String?   @map("ai_model")
+  aiGenerationId    String?   @map("ai_generation_id") @db.Uuid
+  errors            Json      @default("[]")
+  engineVersion     String    @map("engine_version")
+  refreshCompany    Boolean   @default(false) @map("refresh_company")
+  startedAt         DateTime? @map("started_at") @db.Timestamptz(3)
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(3)
+  heartbeatAt       DateTime? @map("heartbeat_at") @db.Timestamptz(3)
+  durationMs        Int?      @map("duration_ms")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job             Job?                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  aiGeneration    AiGeneration?       @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  runSources      ResearchRunSource[]
+  companyResearch CompanyResearch[]
+  jobResearch     JobResearch[]
+
+  @@index([userId, createdAt(sort: Desc)], map: "research_runs_user_created_idx")
+  @@index([userId, jobId, createdAt(sort: Desc)], map: "research_runs_job_idx")
+  @@index([userId, companyId, createdAt(sort: Desc)], map: "research_runs_company_idx")
+  @@map("research_runs")
+}
+
+model ResearchSource {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  companyId       String?   @map("company_id") @db.Uuid
+  jobId           String?   @map("job_id") @db.Uuid
+  url             String
+  normalizedUrl   String    @map("normalized_url")
+  sourceType      String    @map("source_type")
+  reliability     String
+  relevance       String    @default("UNKNOWN")
+  origin          String
+  fetchStatus     String    @map("fetch_status")
+  httpStatus      Int?      @map("http_status")
+  error           String?
+  title           String?
+  publishedAt     DateTime? @map("published_at") @db.Timestamptz(3)
+  sourceUpdatedAt DateTime? @map("source_updated_at") @db.Timestamptz(3)
+  retrievedAt     DateTime? @map("retrieved_at") @db.Timestamptz(3)
+  contentHash     String?   @map("content_hash") @db.Char(64)
+  /// Extracted plain text (≤ 20 000 chars) — never raw HTML
+  contentText     String?   @map("content_text")
+  addedByUser     Boolean   @default(false) @map("added_by_user")
+  addedAt         DateTime? @map("added_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company    Company?                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job        Job?                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  evidence   ResearchClaimEvidence[]
+  runSources ResearchRunSource[]
+
+  @@index([userId, normalizedUrl, createdAt(sort: Desc)], map: "research_sources_user_url_idx")
+  @@index([userId, companyId], map: "research_sources_company_idx")
+  @@index([userId, jobId], map: "research_sources_job_idx")
+  @@map("research_sources")
+}
+
+model CompanyResearch {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  runId              String?   @map("run_id") @db.Uuid
+  version            Int
+  isCurrent          Boolean   @default(true) @map("is_current")
+  status             String
+  depth              String
+  engineVersion      String    @map("engine_version")
+  websiteUrl         String?   @map("website_url")
+  websiteConfidence  String    @default("UNKNOWN") @map("website_confidence")
+  summary            String?
+  /// CompanyBrief (src/modules/research/types.ts)
+  brief              Json      @default("{}")
+  completeness       Json      @default("{}")
+  stats              Json      @default("{}")
+  changes            Json      @default("{}")
+  researchedAt       DateTime  @map("researched_at") @db.Timestamptz(3)
+  lastVerifiedAt     DateTime  @map("last_verified_at") @db.Timestamptz(3)
+  invalidatedAt      DateTime? @map("invalidated_at") @db.Timestamptz(3)
+  invalidationReason String?   @map("invalidation_reason")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  run         ResearchRun?    @relation(fields: [runId], references: [id], onDelete: SetNull)
+  claims      ResearchClaim[]
+  jobResearch JobResearch[]
+
+  @@unique([userId, companyId, version], map: "company_research_version_key")
+  @@map("company_research")
+}
+
+model JobResearch {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  jobId                  String    @map("job_id") @db.Uuid
+  companyId              String    @map("company_id") @db.Uuid
+  runId                  String?   @map("run_id") @db.Uuid
+  version                Int
+  isCurrent              Boolean   @default(true) @map("is_current")
+  status                 String
+  depth                  String
+  engineVersion          String    @map("engine_version")
+  companyResearchId      String?   @map("company_research_id") @db.Uuid
+  companyResearchVersion Int?      @map("company_research_version")
+  requirementSetId       String?   @map("requirement_set_id") @db.Uuid
+  jobContentHash         String    @map("job_content_hash") @db.Char(64)
+  jobSummary             String?   @map("job_summary")
+  /// JobBrief (src/modules/research/types.ts)
+  brief                  Json      @default("{}")
+  completeness           Json      @default("{}")
+  stats                  Json      @default("{}")
+  changes                Json      @default("{}")
+  researchedAt           DateTime  @map("researched_at") @db.Timestamptz(3)
+  lastVerifiedAt         DateTime  @map("last_verified_at") @db.Timestamptz(3)
+  invalidatedAt          DateTime? @map("invalidated_at") @db.Timestamptz(3)
+  invalidationReason     String?   @map("invalidation_reason")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  company         Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  run             ResearchRun?       @relation(fields: [runId], references: [id], onDelete: SetNull)
+  companyResearch CompanyResearch?   @relation(fields: [companyResearchId], references: [id], onDelete: SetNull)
+  requirementSet  JobRequirementSet? @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
+  claims          ResearchClaim[]
+
+  @@unique([userId, jobId, version], map: "job_research_version_key")
+  @@index([userId, companyId], map: "job_research_company_idx")
+  @@map("job_research")
+}
+
+model ResearchClaim {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  companyResearchId String?  @map("company_research_id") @db.Uuid
+  jobResearchId     String?  @map("job_research_id") @db.Uuid
+  position          Int      @default(0)
+  section           String
+  claim             String
+  /// FACT | INTERPRETATION | INFERENCE | UNKNOWN | CONFLICTING
+  claimType         String   @map("claim_type")
+  /// VERIFIED_FROM_SOURCE | PENDING_REVIEW | REJECTED | CONFLICTING
+  verification      String
+  /// RULE | AI | USER
+  method            String   @default("RULE")
+  valueKey          String?  @map("value_key")
+  value             String?
+  /// CURRENT | HISTORICAL | UNDATED
+  temporal          String   @default("UNDATED")
+  rejectionReason   String?  @map("rejection_reason")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyResearch CompanyResearch?        @relation(fields: [companyResearchId], references: [id], onDelete: Cascade)
+  jobResearch     JobResearch?            @relation(fields: [jobResearchId], references: [id], onDelete: Cascade)
+  evidence        ResearchClaimEvidence[]
+
+  @@index([companyResearchId, position], map: "research_claims_company_research_idx")
+  @@index([jobResearchId, position], map: "research_claims_job_research_idx")
+  @@index([userId], map: "research_claims_user_idx")
+  @@map("research_claims")
+}
+
+model ResearchClaimEvidence {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  claimId         String   @map("claim_id") @db.Uuid
+  sourceId        String   @map("source_id") @db.Uuid
+  excerpt         String
+  sourceReference String?  @map("source_reference")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  claim  ResearchClaim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  source ResearchSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, sourceId], map: "research_claim_evidence_claim_source_key")
+  @@index([sourceId], map: "research_claim_evidence_source_idx")
+  @@index([userId], map: "research_claim_evidence_user_idx")
+  @@map("research_claim_evidence")
+}
+
+model ResearchRunSource {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  runId     String   @map("run_id") @db.Uuid
+  sourceId  String   @map("source_id") @db.Uuid
+  outcome   String
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  run    ResearchRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  source ResearchSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sourceId], map: "research_run_sources_run_source_key")
+  @@index([sourceId], map: "research_run_sources_source_idx")
+  @@index([userId], map: "research_run_sources_user_idx")
+  @@map("research_run_sources")
+}
+
+model ResearchNote {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  companyId String?   @map("company_id") @db.Uuid
+  jobId     String?   @map("job_id") @db.Uuid
+  body      String
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  job     Job?     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId, companyId], map: "research_notes_user_company_idx")
+  @@index([userId, jobId], map: "research_notes_user_job_idx")
+  @@map("research_notes")
 }

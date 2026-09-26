@@ -56,6 +56,30 @@ Migration `20261001000000_phase4_matching_engine`:
 All new tables are owner-only under RLS (`user_id = app_current_user_id()`); the results policy also
 requires the parent match to belong to the same user. Details: [matching.md](./matching.md).
 
+## 0f. Phase 5 research
+
+Migration `20261005000000_phase5_research`:
+
+- `companies` + `official_website`, `website_confidence` (UNKNOWN/CONFIRMED/LIKELY/UNCERTAIN) and
+  `website_source`. These are system-written only (from a public catalog job URL).
+- `company_research_targets`: per-user confirmed website / careers page.
+- `research_settings`: default depth, fresh/stale days, optional AI synthesis.
+- `research_runs`: one per operation; steps, counts, AI provider/model/generation, errors, engine
+  version. One QUEUED/RUNNING run per user.
+- `research_sources`: URL + normalized URL, type, reliability, relevance, origin, fetch/HTTP status,
+  dates, content hash, extracted text ≤ 20 000 characters, manual flag.
+- `company_research` and `job_research`: versioned, one current per user + target. They hold the brief
+  (jsonb, typed in `research/types.ts`), completeness, stats, a change summary and invalidation. Job
+  research references the `company_research` version and the requirement set it used.
+- `research_claims`: claim type, verification, method, value key, temporal. A CHECK constraint forbids
+  AI + VERIFIED.
+- `research_claim_evidence`: excerpt + reference per source.
+- `research_run_sources`: USED / UNCHANGED / FAILED / SKIPPED_IRRELEVANT / SKIPPED_LIMIT.
+- `research_notes`: private notes, soft delete.
+
+All research tables are owner-only under RLS; child tables also require the parent row to belong to the
+same user. Details: [research.md](./research.md).
+
 ## 1. Conventions
 
 | Topic            | Rule                                                                                                                                                                                              |

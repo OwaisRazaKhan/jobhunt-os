@@ -88,6 +88,7 @@ JOBHUNT OS will hold CVs, employment history, work-authorization status, email a
 - Security headers via `proxy.ts`/`next.config.ts`: CSP (nonce-based scripts), `X-Content-Type-Options`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `frame-ancestors 'none'`.
 - CSRF: Server Actions have built-in origin checks; Route Handlers that mutate require same-origin + SameSite cookies; webhooks use HMAC signatures with timestamp tolerance.
 - SSRF: outbound fetches of user-supplied URLs go through a guarded HTTP client (scheme allow-list, DNS resolution check against private/link-local ranges, max redirects, size/time limits).
+  Implemented for research in `src/modules/research/fetch/` (Phase 5): the DNS check runs inside the socket's own lookup (no rebinding gap), redirects are re-validated hop by hop, 401/403/CAPTCHA/robots blocks are recorded and never bypassed, and external HTML is reduced to escaped plain text. See [research.md](./research.md) §4.
 
 ## 9. File upload security
 

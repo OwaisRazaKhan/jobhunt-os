@@ -72,7 +72,7 @@ export interface ExtractedRequirement {
 
 // --- Sections ----------------------------------------------------------------------
 
-type Section = "REQUIRED" | "PREFERRED" | "RESPONSIBILITIES" | "BENEFITS" | "ABOUT" | "NONE";
+export type Section = "REQUIRED" | "PREFERRED" | "RESPONSIBILITIES" | "BENEFITS" | "ABOUT" | "NONE";
 
 const HEADINGS: [Section, RegExp][] = [
   [
@@ -97,7 +97,7 @@ const HEADINGS: [Section, RegExp][] = [
   ],
 ];
 
-function headingSection(line: string): Section | null {
+export function headingSection(line: string): Section | null {
   const t = line.replace(/^[#*•\-\s]+|[:\s]+$/g, "");
   if (t.length === 0 || t.length > 70 || /[.!?]$/.test(line.trim())) return null;
   if (t.split(/\s+/).length > 9) return null;
@@ -127,14 +127,14 @@ function lineType(section: Section, line: string): RequirementType | null {
 
 // --- Line splitting ----------------------------------------------------------------
 
-interface Line {
+export interface Line {
   n: number;
   text: string;
   /** Bullet / numbered item: content, never a section heading */
   bullet: boolean;
 }
 
-function descriptionLines(description: string): Line[] {
+export function descriptionLines(description: string): Line[] {
   const out: Line[] = [];
   description.split(/\r?\n/).forEach((raw, i) => {
     const bullet = /^\s*(?:[•·▪◦*\-–]|\d{1,2}[.)])\s+/.test(raw);

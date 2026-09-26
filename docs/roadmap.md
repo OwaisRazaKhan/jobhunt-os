@@ -80,6 +80,13 @@ Each phase ends with a review and **explicit approval** before the next begins. 
 
 ## Phase 5 — Company + Job Research
 
+> **Status: complete.** Details: [research.md](research.md). Built: SSRF-safe fetcher with robots,
+> rate limits and bounded depth tiers; company identity resolution (never guessed, never merged);
+> versioned company + job research with claims and evidence; conflict preservation; optional validated
+> AI synthesis; freshness and invalidation; manual sources, private notes, export; `/jobs/[id]/research`,
+> `/companies`, `/companies/[id]`, `/research`; the [RESEARCH] node contract.
+> Deviation: contacts CRUD is deferred to the outreach phases.
+
 - **Objective:** cited company research to inform tailoring.
 - **Dependencies:** Phase 3.
 - **Inputs:** companies, jobs, permitted web sources.

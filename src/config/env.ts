@@ -56,6 +56,19 @@ export const serverEnvSchema = z.object({
   /** Due profiles started per cron invocation (runs execute one after another). */
   CRON_MAX_PROFILES: z.coerce.number().int().min(1).max(20).default(5),
 
+  // Research (Phase 5). Free-first: no search provider is required. Optional self-hosted SearXNG
+  // instance for public web discovery (JSON API enabled). Operator config — never user input.
+  SEARXNG_URL: optionalUrl,
+  RESEARCH_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(120).default(30),
+  RESEARCH_REQUESTS_PER_HOUR: z.coerce.number().int().min(1).max(5000).default(300),
+  RESEARCH_PER_HOST_PER_MINUTE: z.coerce.number().int().min(1).max(60).default(12),
+  RESEARCH_MAX_RESPONSE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .max(10_000_000)
+    .default(1_500_000),
+
   // Upload limits
   MAX_UPLOAD_BYTES: z.coerce
     .number()

@@ -17,6 +17,8 @@ import { getMatchForJob } from "@/modules/matching/match.service";
 import { ensureJobRequirements } from "@/modules/matching/requirements/requirements.service";
 import { RequirementsCard } from "@/modules/matching/ui/requirements-card";
 import { MatchCard } from "@/modules/matching/ui/match-card";
+import { getJobResearchView } from "@/modules/research/research.service";
+import { ResearchCard } from "@/modules/research/ui/research-card";
 import type { JobStatus, RemoteStatus, SalaryPeriod } from "@/modules/jobs/types";
 import { DeleteJobButton } from "@/modules/jobs/ui/delete-job-button";
 import { JobStatusBadge, RemoteBadge } from "@/modules/jobs/ui/job-badges";
@@ -110,7 +112,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
   });
   if (!result) return <NotFound />;
   const { job, canEdit } = result;
-  const [requirementResult, matchResult, catalog] = await Promise.all([
+  const [requirementResult, matchResult, catalog, researchResult] = await Promise.all([
     // A failing requirements step must not take the whole job page down.
     ensureJobRequirements(actor, job.id).then(
       (r) => ({ set: r.set, problem: null }),
@@ -135,6 +137,18 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
       },
     ),
     getJobCatalogContext(actor, job.id),
+    // Research never blocks the job page: a failure shows a notice in the card.
+    getJobResearchView(actor, job.id).then(
+      (view) => ({ view, problem: null }),
+      (error: unknown) => {
+        const problem = isSchemaOutOfDate(error) ? ("migration" as const) : ("error" as const);
+        logger.error("job research unavailable", {
+          problem,
+          error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        });
+        return { view: null, problem };
+      },
+    ),
   ]);
   const salary = formatSalary({
     salaryMin: job.salaryMin,
@@ -232,6 +246,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
               match: matchResult.match,
             }}
           />
+          <ResearchCard view={researchResult.view} problem={researchResult.problem} />
           <Card>
             <CardHeader title="Details" />
             <dl className="divide-border divide-y py-1">

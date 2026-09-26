@@ -16,6 +16,8 @@ interface TaskPolicy {
 const TASK_POLICIES: Record<AiTask, TaskPolicy> = {
   "candidate.extract_facts": { personalData: true },
   "matching.semantic_skills": { personalData: true },
+  // Public job + company source excerpts only — no candidate data is sent.
+  "research.synthesize": { personalData: false },
 };
 
 let providerOverride: AiProvider[] | undefined;
