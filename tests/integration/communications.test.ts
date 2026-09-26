@@ -243,28 +243,25 @@ describe("versioning & approval", () => {
     ).toBe(0);
   });
 
-  it("an unsupported claim blocks approval", async () => {
+  it("an unsupported statement in the text blocks approval (claims are re-derived from the text)", async () => {
     const c = await createCommunication(a, { communicationType: "APPLICATION_EMAIL", jobId });
     const ws = await getCommunicationWorkspace(a, c.id);
     const saved = await saveCommunicationContent(a, c.id, {
-      content: { ...(ws.doc as EmailDocument), bodyParagraphs: completeBody },
+      content: {
+        ...(ws.doc as EmailDocument),
+        bodyParagraphs: [...completeBody, "I led a team of 12 engineers."],
+      },
       expectedHash: ws.version!.contentHash,
     });
-    await withUserContext(a.userId, (t) =>
-      t.communicationClaim.create({
-        data: {
-          userId: a.userId,
-          versionId: saved.version.id,
-          location: "body:0",
-          text: "Led a team of 12",
-          claimKind: "CANDIDATE",
-          status: "UNSUPPORTED",
-        },
-      }),
-    );
     await expect(
       approveCommunicationVersion(a, saved.version.id, saved.version.contentHash),
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    const claims = await withUserContext(a.userId, (t) =>
+      t.communicationClaim.findMany({
+        where: { versionId: saved.version.id, status: "UNSUPPORTED" },
+      }),
+    );
+    expect(claims.map((x) => x.text)).toEqual(["I led a team of 12 engineers."]);
   });
 
   it("archived communications are read-only until restored", async () => {

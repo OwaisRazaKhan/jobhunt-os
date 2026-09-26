@@ -125,6 +125,10 @@ export type AuditAction =
   | "communication_unarchived"
   | "communication_exported"
   | "communication_export_failed"
+  | "communication_generated"
+  | "communication_generation_failed"
+  | "communication_imported"
+  | "communication_duplicated"
   | "signature_preset_saved"
   | "signature_preset_deleted";
 

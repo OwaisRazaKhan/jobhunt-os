@@ -101,7 +101,12 @@ export type AiErrorKind = (typeof AI_ERROR_KINDS)[number];
 
 /** Existing task identifiers (stored in ai_generations.task). See registry.ts. */
 export type AiTask =
-  "candidate.extract_facts" | "matching.semantic_skills" | "research.synthesize" | "resume.tailor";
+  | "candidate.extract_facts"
+  | "matching.semantic_skills"
+  | "research.synthesize"
+  | "resume.tailor"
+  | "email.generate"
+  | "cover_letter.generate";
 
 export interface ModelChoice {
   provider: AiProvider;

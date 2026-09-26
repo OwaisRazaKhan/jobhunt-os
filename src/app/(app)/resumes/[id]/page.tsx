@@ -140,6 +140,18 @@ export default async function ResumePage({ params, searchParams }: PageProps<"/r
                 Compare
               </Link>
             )}
+            <Link
+              href={`/communications/new?kind=cover-letter&resumeVersionId=${version.id}${job ? `&jobId=${job.id}` : ""}`}
+              className={buttonClass("secondary", "sm")}
+            >
+              Create cover letter
+            </Link>
+            <Link
+              href={`/communications/new?type=APPLICATION_EMAIL&resumeVersionId=${version.id}${job ? `&jobId=${job.id}` : ""}`}
+              className={buttonClass("secondary", "sm")}
+            >
+              Write email
+            </Link>
             <InlineAction
               action={duplicateResumeAction}
               hidden={{ resumeId: resume.id }}

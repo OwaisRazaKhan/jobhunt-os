@@ -2,6 +2,7 @@ import { Mail } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Alert, Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { buttonClass } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import {
   LIST_FILTERS,
@@ -44,6 +45,22 @@ export default async function CommunicationsPage({ searchParams }: PageProps<"/c
         eyebrow="Documents"
         title="Communication Studio"
         description="Application emails and cover letters prepared from your verified facts and sourced company research. Nothing is ever sent from here — you copy or export an approved version and send it yourself."
+        actions={
+          <>
+            <Link href="/communications/new" className={buttonClass("primary", "sm")}>
+              New email
+            </Link>
+            <Link
+              href="/communications/new?kind=cover-letter"
+              className={buttonClass("secondary", "sm")}
+            >
+              New cover letter
+            </Link>
+            <Link href="/communications/signatures" className={buttonClass("ghost", "sm")}>
+              Signatures
+            </Link>
+          </>
+        }
       />
 
       <Alert tone="info" title="Prepared, never sent">
@@ -80,7 +97,7 @@ export default async function CommunicationsPage({ searchParams }: PageProps<"/c
             title={filter === "all" ? "No communications yet" : "Nothing in this view"}
             description={
               filter === "all"
-                ? "Emails and cover letters you prepare for a job will appear here, each with its full version history."
+                ? "Emails and cover letters you prepare for a job will appear here, each with its full version history. Start from a job (Write application email / cover letter) or use the buttons above."
                 : "Try another filter."
             }
           />
@@ -94,7 +111,12 @@ export default async function CommunicationsPage({ searchParams }: PageProps<"/c
                   className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
                 >
                   <div className="min-w-0 text-sm">
-                    <p className="text-fg truncate font-medium">{c.title}</p>
+                    <Link
+                      href={`/communications/${c.id}`}
+                      className="text-fg truncate font-medium hover:underline"
+                    >
+                      {c.title}
+                    </Link>
                     <p className="text-fg-muted text-xs">
                       {TYPE_LABELS[c.communicationType as CommunicationType]}
                       {c.job ? ` · ${c.job.title}` : ""}

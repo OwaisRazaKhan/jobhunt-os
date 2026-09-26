@@ -104,6 +104,40 @@ export const TASKS: Record<AiTask, TaskPolicy> = {
     description:
       "Rewords resume bullets/summary from your facts; every statement passes claim validation.",
   },
+  "email.generate": {
+    task: "email.generate",
+    label: "Email drafting",
+    phase: 7,
+    sensitivity: "PRIVATE_CANDIDATE",
+    defaultProvider: "ollama",
+    allowedProviders: ["ollama", "gemini"],
+    structuredOutputRequired: true,
+    fallback: "deterministic",
+    maxRetries: 1,
+    maxOutputTokens: 3000,
+    timeoutMs: 300_000,
+    untrustedContent: true,
+    cacheable: false,
+    description:
+      "Drafts application/outreach emails from your facts and sourced research; every statement passes claim validation. Nothing is sent.",
+  },
+  "cover_letter.generate": {
+    task: "cover_letter.generate",
+    label: "Cover letter drafting",
+    phase: 7,
+    sensitivity: "PRIVATE_CANDIDATE",
+    defaultProvider: "ollama",
+    allowedProviders: ["ollama", "gemini"],
+    structuredOutputRequired: true,
+    fallback: "deterministic",
+    maxRetries: 1,
+    maxOutputTokens: 5000,
+    timeoutMs: 300_000,
+    untrustedContent: true,
+    cacheable: false,
+    description:
+      "Drafts cover letters from your facts, approved resume and sourced research; every statement passes claim validation.",
+  },
 };
 
 /**
@@ -128,13 +162,6 @@ export const PLANNED_TASKS: readonly {
     phase: 6,
     sensitivity: "PRIVATE_CANDIDATE",
   },
-  {
-    task: "cover_letter.generate",
-    label: "Cover letter generation",
-    phase: 7,
-    sensitivity: "PRIVATE_CANDIDATE",
-  },
-  { task: "email.generate", label: "Email generation", phase: 7, sensitivity: "PRIVATE_CANDIDATE" },
   {
     task: "application.answers",
     label: "Application answers",

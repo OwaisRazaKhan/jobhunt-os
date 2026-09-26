@@ -207,6 +207,24 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
           <Link href={`/resumes/tailor?job=${job.id}`} className={buttonClass("primary", "sm")}>
             Tailor resume
           </Link>
+          <Link
+            href={`/communications/new?type=APPLICATION_EMAIL&jobId=${job.id}`}
+            className={buttonClass("secondary", "sm")}
+          >
+            Write application email
+          </Link>
+          <Link
+            href={`/communications/new?type=RECRUITER_OUTREACH&jobId=${job.id}`}
+            className={buttonClass("ghost", "sm")}
+          >
+            Write recruiter email
+          </Link>
+          <Link
+            href={`/communications/new?kind=cover-letter&jobId=${job.id}`}
+            className={buttonClass("secondary", "sm")}
+          >
+            Write cover letter
+          </Link>
         </div>
         {canEdit && (
           <div className="flex gap-2">

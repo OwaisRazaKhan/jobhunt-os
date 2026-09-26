@@ -38,6 +38,10 @@ export interface QualityInput {
     length: "SHORT" | "STANDARD" | "DETAILED";
     /** An attachment is only ever associated in Phase 7, never sent */
     resumeAssociated: boolean;
+    /** Plain text of the associated resume version (repetition check) */
+    resumeText?: string | null;
+    /** Context the user typed (relationships stated there are not invented) */
+    userContext?: string | null;
   };
   claims: { location: string; text: string; claimKind: ClaimKind; status: ClaimStatus }[];
 }
@@ -186,14 +190,79 @@ export function runQualityChecks(input: QualityInput): QualityFinding[] {
       null,
     );
   }
-  if (FAKE_FAMILIARITY.test(text))
+  if (FAKE_FAMILIARITY.test(text)) {
+    const stated =
+      context.userContext &&
+      /\b(met|meet|spoke|speak|talk|call|conversation|event|referr|introduc|recommend|know|friend|follow)\w*/i.test(
+        context.userContext,
+      );
     add(
       "ACCURACY",
       "relationship.claim",
-      "CRITICAL",
-      "The text implies a prior conversation or relationship.",
-      "Only mention contact that actually happened — add it as your own context first.",
+      stated ? "WARNING" : "CRITICAL",
+      stated
+        ? "The text mentions prior contact. It comes from your own context — make sure it is accurate."
+        : "The text implies a prior conversation or relationship.",
+      stated
+        ? null
+        : "Only mention contact that actually happened — add it as your own context first.",
     );
+  }
+
+  // --- PERSONALIZATION (evidence) -------------------------------------------------------
+  const evidence = input.claims.filter(
+    (c) => c.claimKind === "CANDIDATE" && c.status === "SUPPORTED",
+  );
+  if (body.length) {
+    if (evidence.length)
+      add(
+        "PERSONALIZATION",
+        "evidence.present",
+        "PASS",
+        `Uses ${evidence.length} piece${evidence.length === 1 ? "" : "s"} of evidence from your facts.`,
+      );
+    else
+      add(
+        "PERSONALIZATION",
+        "evidence.missing",
+        "WARNING",
+        "No concrete evidence from your experience is used.",
+        "Add one specific, relevant example from your facts.",
+      );
+  }
+  if (context.resumeText && body.length) {
+    const resumeLines = new Set(
+      context.resumeText
+        .split(/\n+/)
+        .map((l) =>
+          l
+            .replace(/^[-•]\s*/, "")
+            .trim()
+            .toLowerCase(),
+        )
+        .filter((l) => l.length > 40),
+    );
+    body.forEach((p, i) => {
+      const s = sentences(p);
+      const copied = s.filter((x) =>
+        resumeLines.has(
+          x
+            .replace(/[.!?]$/, "")
+            .trim()
+            .toLowerCase(),
+        ),
+      );
+      if (s.length && copied.length / s.length >= 0.5)
+        add(
+          "WRITING",
+          "resume.repeated",
+          "WARNING",
+          `Paragraph ${i + 1} repeats your resume word for word.`,
+          "Use the paragraph to explain why that experience is relevant to this role.",
+          `body:${i}`,
+        );
+    });
+  }
 
   // --- CONSISTENCY ---------------------------------------------------------------------
   const greetName = doc.greeting.match(/^(?:dear|hi|hello)\s+([^,]+),?$/i)?.[1]?.trim();

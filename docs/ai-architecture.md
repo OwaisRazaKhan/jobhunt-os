@@ -25,7 +25,8 @@
 
 Call sites (all through `runAiTask`): CV extraction (`candidate/extraction/ai-extract.ts`), match assist
 (`matching/semantic.ts`), research synthesis (`research/synthesis.ts`), resume tailoring
-(`resumes/tailor.service.ts`). No business module imports a provider.
+(`resumes/tailor.service.ts`), email and cover-letter drafting (`communications/generation.service.ts`).
+No business module imports a provider.
 
 ### 0.2 Task registry
 
@@ -35,9 +36,11 @@ Call sites (all through `runAiTask`): CV extraction (`candidate/extraction/ai-ex
 | `matching.semantic_skills` | 4     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | deterministic | 1       | 2000       |
 | `research.synthesize`      | 5     | PUBLIC            | `AI_PUBLIC_PROVIDER` | gemini, ollama | evidence only | 1       | 8000       |
 | `resume.tailor`            | 6     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | deterministic | 1       | 4000       |
+| `email.generate`           | 7     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | manual        | 1       | 3000       |
+| `cover_letter.generate`    | 7     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | manual        | 1       | 5000       |
 
 Planned (declared, not routable until built): job requirement extraction, resume quality analysis,
-cover letter, email (PRIVATE_CANDIDATE), application answers (HIGH_SENSITIVITY).
+application answers (HIGH_SENSITIVITY).
 
 ### 0.3 Privacy routing (applied before preferences; cannot be overridden by the client)
 

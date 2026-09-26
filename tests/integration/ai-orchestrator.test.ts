@@ -88,6 +88,8 @@ describe("routing & privacy policy", () => {
       "candidate.extract_facts",
       "matching.semantic_skills",
       "resume.tailor",
+      "email.generate",
+      "cover_letter.generate",
     ] as const) {
       const route = resolveRoute(task, { ...DEFAULT_AI_PREFERENCES, primaryProvider: "gemini" });
       expect(route.steps.map((s) => s.kind)).toEqual(["ollama"]);

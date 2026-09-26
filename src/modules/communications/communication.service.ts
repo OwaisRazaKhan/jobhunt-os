@@ -1,10 +1,12 @@
 import "server-only";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
+import { createFact } from "@/modules/candidate/facts.service";
 import { getProfile } from "@/modules/candidate/profile.service";
 import { loadUsableFacts } from "@/modules/resumes/resume.service";
 import { recordAudit } from "@/server/audit";
 import { sha256Hex } from "@/server/crypto";
+import { uuidv7 } from "@/lib/ids";
 import { withUserContext, type Tx } from "@/server/db";
 import { AppError } from "@/server/errors";
 import {
@@ -13,6 +15,10 @@ import {
   toPlainText,
   type CommunicationDocument,
 } from "./document";
+import { auditDocument, corpusFingerprint, type AuditedClaim, type DeclaredClaim } from "./claims";
+import { loadEvidence } from "./context.service";
+import { diffCommunications, summarizeCommunicationDiff } from "./diff";
+import { parseImportedText } from "./import";
 import { communicationContentHash, contextHash } from "./hash";
 import { QUALITY_CHECKER_VERSION, runQualityChecks, summarizeQuality } from "./quality";
 import {
@@ -284,6 +290,144 @@ function assertActive(c: { status: string }) {
     });
 }
 
+/** Evidence for a version, loaded for the exact versions it is locked to. */
+export async function evidenceForVersion(
+  t: Tx,
+  actor: ActorRef,
+  version: {
+    resumeVersionId: string | null;
+    requirementSetId: string | null;
+    jobResearchId: string | null;
+    matchId: string | null;
+  },
+  c: {
+    jobId: string | null;
+    userContext: string | null;
+    recipientName: string | null;
+    recipientTitle: string | null;
+    recipientCompany: string | null;
+  },
+) {
+  return loadEvidence(t, actor, {
+    jobId: c.jobId,
+    resumeVersionId: version.resumeVersionId,
+    requirementSetId: version.requirementSetId,
+    jobResearchId: version.jobResearchId,
+    matchId: version.matchId,
+    userContext: c.userContext,
+    recipient: { name: c.recipientName, title: c.recipientTitle, company: c.recipientCompany },
+  });
+}
+
+const FACT_REF = /^[a-z]+:[0-9a-f-]{36}$/;
+
+type ClaimRow = {
+  location: string;
+  text: string;
+  claimKind: string;
+  status: string;
+  reasons: Prisma.InputJsonValue;
+  sources: { sourceKind: string; factRef?: string | null; researchClaimId?: string | null }[];
+};
+
+/** Batched insert (3 round trips regardless of the number of claims). */
+async function insertClaimRows(t: Tx, actor: ActorRef, versionId: string, rows: ClaimRow[]) {
+  if (!rows.length) return;
+  const withIds = rows.map((r) => ({ ...r, id: uuidv7() }));
+  await t.communicationClaim.createMany({
+    data: withIds.map((r) => ({
+      id: r.id,
+      userId: actor.userId,
+      versionId,
+      location: r.location.slice(0, 40),
+      text: r.text.slice(0, 2000),
+      claimKind: r.claimKind,
+      status: r.status,
+      reasons: r.reasons,
+    })),
+  });
+  const sources = withIds.flatMap((r) =>
+    r.sources.map((src) => ({
+      userId: actor.userId,
+      claimId: r.id,
+      sourceKind: src.sourceKind,
+      factRef: src.factRef ?? null,
+      researchClaimId: src.researchClaimId ?? null,
+    })),
+  );
+  if (sources.length) await t.communicationClaimSource.createMany({ data: sources });
+}
+
+/** Replaces a version's claims (with their evidence links). */
+export async function persistClaims(
+  t: Tx,
+  actor: ActorRef,
+  versionId: string,
+  claims: AuditedClaim[],
+) {
+  await t.communicationClaim.deleteMany({ where: { versionId, userId: actor.userId } });
+  await insertClaimRows(
+    t,
+    actor,
+    versionId,
+    claims.map((c) => ({
+      location: c.location,
+      text: c.text,
+      claimKind: c.claimKind,
+      status: c.status,
+      reasons: { reasons: c.reasons, basis: c.basis, unsupported: c.unsupported },
+      sources: [
+        ...c.factRefs
+          .filter((r) => FACT_REF.test(r))
+          .map((factRef) => ({ sourceKind: "CANDIDATE_FACT", factRef })),
+        ...c.researchClaimIds.map((researchClaimId) => ({
+          sourceKind: "RESEARCH_CLAIM",
+          researchClaimId,
+        })),
+        ...(c.userContext ? [{ sourceKind: "USER_CONTEXT" }] : []),
+      ],
+    })),
+  );
+}
+
+async function declaredFromClaims(
+  t: Tx,
+  actor: ActorRef,
+  versionId: string,
+): Promise<DeclaredClaim[]> {
+  const rows = await t.communicationClaim.findMany({
+    where: { versionId, userId: actor.userId },
+    include: { sources: true },
+  });
+  return rows.map((r) => ({
+    text: r.text,
+    factRefs: r.sources.flatMap((s) => (s.factRef ? [s.factRef] : [])),
+    researchClaimIds: r.sources.flatMap((s) => (s.researchClaimId ? [s.researchClaimId] : [])),
+    usesUserContext: r.sources.some((s) => s.sourceKind === "USER_CONTEXT"),
+  }));
+}
+
+/** Carries claim provenance (citations) to a new version; the next check re-audits it. */
+async function copyClaims(t: Tx, actor: ActorRef, fromVersionId: string, toVersionId: string) {
+  const rows = await t.communicationClaim.findMany({
+    where: { versionId: fromVersionId, userId: actor.userId },
+    include: { sources: true },
+  });
+  await insertClaimRows(
+    t,
+    actor,
+    toVersionId,
+    rows.map((r) => ({
+      location: r.location,
+      text: r.text,
+      claimKind: r.claimKind,
+      status: r.status,
+      reasons: r.reasons as Prisma.InputJsonValue,
+      sources: r.sources,
+    })),
+  );
+}
+
 // --- Create --------------------------------------------------------------------------
 
 /** Starting document: structure only (no generic copy), greeting never invents a name. */
@@ -331,7 +475,11 @@ export function starterDocument(input: {
   });
 }
 
-export async function createCommunication(actor: ActorRef, raw: CreateCommunicationInput) {
+export async function createCommunication(
+  actor: ActorRef,
+  raw: CreateCommunicationInput,
+  initial?: { importedText: string },
+) {
   const input = createCommunicationInput.parse(raw);
   return withUserContext(actor.userId, async (t) => {
     const ctx = await captureContext(t, actor, input.jobId, input.resumeVersionId);
@@ -375,7 +523,7 @@ export async function createCommunication(actor: ActorRef, raw: CreateCommunicat
         signaturePresetId: input.signaturePresetId ?? null,
       },
     });
-    const doc = starterDocument({
+    const starter = starterDocument({
       type: input.communicationType,
       jobTitle: ctx.job?.title ?? null,
       companyName: ctx.job?.companyName ?? null,
@@ -390,17 +538,34 @@ export async function createCommunication(actor: ActorRef, raw: CreateCommunicat
           }
         : undefined,
     });
+    // Imported text is data: reduced to plain text and structured, header/recipient from facts.
+    const doc = initial
+      ? (() => {
+          const parsed = parseImportedText(initial.importedText, kind, {
+            greeting: starter.greeting,
+            signature,
+            subject: starter.kind === "EMAIL" ? starter.subject : undefined,
+          });
+          return parsed.kind === "COVER_LETTER" && starter.kind === "COVER_LETTER"
+            ? parseCommunicationDocument({
+                ...parsed,
+                header: starter.header,
+                recipient: starter.recipient,
+              })
+            : parsed;
+        })()
+      : starter;
     await insertVersion(t, actor, {
       communicationId: communication.id,
       doc,
-      versionType: "MANUAL_EDIT",
-      contentSource: "USER_AUTHORED",
+      versionType: initial ? "IMPORTED" : "MANUAL_EDIT",
+      contentSource: initial ? "IMPORTED" : "USER_AUTHORED",
       context: ctx,
-      generation: { method: "MANUAL" },
+      generation: { method: initial ? "IMPORT" : "MANUAL" },
     });
     await recordAudit(t, {
       userId: actor.userId,
-      action: "communication_created",
+      action: initial ? "communication_imported" : "communication_created",
       resourceType: "communication",
       resourceId: communication.id,
       metadata: { kind, type: input.communicationType, jobId: ctx.job?.id ?? null },
@@ -550,7 +715,7 @@ export async function getCommunicationWorkspace(
 
 /**
  * Saves editor content with optimistic concurrency (`expectedHash`). DRAFT heads are updated in
- * place (their claims are cleared — they described the old text); any other state creates a
+ * place (claims are re-audited by the next check); any other state creates a
  * new MANUAL_EDIT version, so approved content never changes and approval never carries over.
  */
 export async function saveCommunicationContent(
@@ -594,9 +759,6 @@ export async function saveCommunicationContent(
           : "USER_AUTHORED";
 
     if (head.status === "DRAFT") {
-      await t.communicationClaim.deleteMany({
-        where: { versionId: head.id, userId: actor.userId },
-      });
       const version = await t.communicationVersion.update({
         where: { id: head.id },
         data: {
@@ -638,6 +800,7 @@ export async function saveCommunicationContent(
       },
       generation: { method: "MANUAL_EDIT", from: head.id, supersedes: head.status },
     });
+    await copyClaims(t, actor, head.id, version.id);
     await recordAudit(t, {
       userId: actor.userId,
       action: "communication_version_created",
@@ -723,6 +886,7 @@ export async function restoreCommunicationVersion(actor: ActorRef, versionId: st
       },
       generation: { method: "RESTORE", from: source.id },
     });
+    await copyClaims(t, actor, source.id, version.id);
     await recordAudit(t, {
       userId: actor.userId,
       action: "communication_restored",
@@ -736,55 +900,75 @@ export async function restoreCommunicationVersion(actor: ActorRef, versionId: st
 
 // --- Checks ---------------------------------------------------------------------------------
 
+/**
+ * Quality check for the exact content: re-audits every statement against the version's locked
+ * evidence (claims are replaced), then runs the deterministic quality engine. A check is reused
+ * only while the content AND the evidence are unchanged.
+ */
 export async function runCommunicationCheck(
   actor: ActorRef,
   versionId: string,
   opts: { force?: boolean } = {},
 ) {
-  return withUserContext(actor.userId, async (t) => {
+  // 1. Read (evidence for the locked context, latest check, current citations).
+  const read = await withUserContext(actor.userId, async (t) => {
     const version = await ownedVersion(t, actor, versionId);
-    if (!opts.force) {
-      const cached = await t.communicationCheck.findFirst({
-        where: {
-          versionId: version.id,
-          userId: actor.userId,
-          contentHash: version.contentHash,
-          checkerVersion: QUALITY_CHECKER_VERSION,
-        },
-        include: { findings: true },
-        orderBy: { createdAt: "desc" },
-      });
-      if (cached) return { check: cached, cached: true };
-    }
-    const c = version.communication;
-    const job = c.jobId
-      ? await t.job.findFirst({
-          where: { id: c.jobId },
-          select: { title: true, company: { select: { name: true } } },
-        })
-      : null;
-    const profile = await getProfile(actor, t);
-    const claims = await t.communicationClaim.findMany({
+    const evidence = await evidenceForVersion(t, actor, version, version.communication);
+    const evidenceHash = sha256Hex(corpusFingerprint(evidence.corpus));
+    const latest = await t.communicationCheck.findFirst({
       where: { versionId: version.id, userId: actor.userId },
+      include: { findings: true },
+      orderBy: { createdAt: "desc" },
     });
-    const findings = runQualityChecks({
-      doc: parseCommunicationDocument(version.content),
-      context: {
-        jobTitle: job?.title ?? null,
-        companyName: job?.company?.name ?? c.recipientCompany ?? null,
-        candidateName: profile?.fullName ?? null,
-        recipientName: c.recipientName,
-        length: c.length as "SHORT" | "STANDARD" | "DETAILED",
-        resumeAssociated: Boolean(version.resumeVersionId),
-      },
-      claims: claims.map((x) => ({
-        location: x.location,
-        text: x.text,
-        claimKind: x.claimKind as "CANDIDATE",
-        status: x.status as "SUPPORTED",
-      })),
+    const declared = await declaredFromClaims(t, actor, version.id);
+    return { version, evidence, evidenceHash, latest, declared };
+  });
+  const { version, evidence, evidenceHash, latest } = read;
+  const c = version.communication;
+  if (
+    !opts.force &&
+    latest &&
+    latest.contentHash === version.contentHash &&
+    latest.checkerVersion === QUALITY_CHECKER_VERSION &&
+    (latest.summary as { evidenceHash?: string }).evidenceHash === evidenceHash
+  )
+    return { check: latest, cached: true };
+
+  // 2. Compute (pure).
+  const doc = parseCommunicationDocument(version.content);
+  const claims = auditDocument(doc, evidence.corpus, read.declared);
+  const findings = runQualityChecks({
+    doc,
+    context: {
+      jobTitle: evidence.job?.title ?? null,
+      companyName: evidence.job?.company ?? c.recipientCompany ?? null,
+      candidateName: evidence.corpus.candidateName,
+      recipientName: c.recipientName,
+      length: c.length as "SHORT" | "STANDARD" | "DETAILED",
+      resumeAssociated: Boolean(version.resumeVersionId),
+      resumeText: evidence.resume?.text ?? null,
+      userContext: c.userContext,
+    },
+    claims: claims.map((x) => ({
+      location: x.location,
+      text: x.text,
+      claimKind: x.claimKind,
+      status: x.status,
+    })),
+  });
+  const summary = { ...summarizeQuality(findings), evidenceHash, claims: claims.length };
+
+  // 3. Write (only if the content is still the content that was checked).
+  return withUserContext(actor.userId, async (t) => {
+    const current = await t.communicationVersion.findFirst({
+      where: { id: version.id, userId: actor.userId },
+      select: { contentHash: true },
     });
-    const summary = summarizeQuality(findings);
+    if (!current || current.contentHash !== version.contentHash)
+      throw new AppError("CONFLICT", {
+        publicMessage: "The content changed while it was being checked. Run the check again.",
+      });
+    await persistClaims(t, actor, version.id, claims);
     const check = await t.communicationCheck.create({
       data: {
         userId: actor.userId,
@@ -793,16 +977,18 @@ export async function runCommunicationCheck(
         checkerVersion: QUALITY_CHECKER_VERSION,
         summary: summary as unknown as Prisma.InputJsonValue,
         findings: {
-          create: findings.map((f) => ({
-            userId: actor.userId,
-            category: f.category,
-            code: f.code,
-            severity: f.severity,
-            message: f.message.slice(0, 1000),
-            recommendation: f.recommendation?.slice(0, 1000) ?? null,
-            location: f.location,
-            evidence: f.evidence as Prisma.InputJsonValue,
-          })),
+          createMany: {
+            data: findings.map((f) => ({
+              userId: actor.userId,
+              category: f.category,
+              code: f.code,
+              severity: f.severity,
+              message: f.message.slice(0, 1000),
+              recommendation: f.recommendation?.slice(0, 1000) ?? null,
+              location: f.location,
+              evidence: f.evidence as Prisma.InputJsonValue,
+            })),
+          },
         },
       },
       include: { findings: true },
@@ -812,7 +998,13 @@ export async function runCommunicationCheck(
       action: "communication_checked",
       resourceType: "communication_version",
       resourceId: version.id,
-      metadata: { checkId: check.id, ...summary },
+      metadata: {
+        checkId: check.id,
+        passed: summary.passed,
+        critical: summary.critical,
+        warnings: summary.warnings,
+        claims: claims.length,
+      },
     });
     return { check, cached: false };
   });
@@ -1045,5 +1237,198 @@ export async function deleteSignaturePreset(actor: ActorRef, id: string) {
       resourceType: "signature_preset",
       resourceId: id,
     });
+  });
+}
+
+// --- Duplicate / compare / facts -------------------------------------------------------------
+
+/** Copies the current content into a NEW communication (history of the original untouched). */
+export async function duplicateCommunication(actor: ActorRef, id: string) {
+  return withUserContext(actor.userId, async (t) => {
+    const source = await ownedCommunication(t, actor, id);
+    const head = source.currentVersionId
+      ? await t.communicationVersion.findUnique({ where: { id: source.currentVersionId } })
+      : null;
+    if (!head) throw new AppError("NOT_FOUND");
+    const {
+      id: _id,
+      currentVersionId: _cv,
+      createdAt: _c,
+      updatedAt: _u,
+      archivedAt: _a,
+      ...settings
+    } = source;
+    const copy = await t.communication.create({
+      data: { ...settings, status: "ACTIVE", title: `${source.title} (copy)`.slice(0, 200) },
+    });
+    const version = await insertVersion(t, actor, {
+      communicationId: copy.id,
+      doc: parseCommunicationDocument(head.content),
+      versionType: "DUPLICATED",
+      contentSource:
+        head.contentSource === "RESTORED" ? "USER_AUTHORED" : (head.contentSource as ContentSource),
+      context: {
+        requirementSetId: head.requirementSetId,
+        jobResearchId: head.jobResearchId,
+        match: head.matchId
+          ? { id: head.matchId, overallStatus: "", computedAt: new Date(0) }
+          : null,
+        resumeVersion: head.resumeVersionId
+          ? { id: head.resumeVersionId, resumeId: "", versionNumber: 0, status: "", resumeName: "" }
+          : null,
+        factsHash: "",
+      },
+      generation: { method: "DUPLICATE", from: head.id },
+    });
+    await copyClaims(t, actor, head.id, version.id);
+    await recordAudit(t, {
+      userId: actor.userId,
+      action: "communication_duplicated",
+      resourceType: "communication",
+      resourceId: copy.id,
+      metadata: { from: source.id, fromVersionId: head.id },
+    });
+    return copy;
+  });
+}
+
+export async function compareCommunicationVersions(
+  actor: ActorRef,
+  fromVersionId: string,
+  toVersionId: string,
+) {
+  return withUserContext(actor.userId, async (t) => {
+    const [from, to] = [
+      await ownedVersion(t, actor, fromVersionId),
+      await ownedVersion(t, actor, toVersionId),
+    ];
+    if (from.communicationId !== to.communicationId)
+      throw new AppError("VALIDATION_ERROR", {
+        publicMessage: "Both versions must belong to the same communication.",
+      });
+    const entries = diffCommunications(
+      parseCommunicationDocument(from.content),
+      parseCommunicationDocument(to.content),
+    );
+    return {
+      communication: from.communication,
+      from,
+      to,
+      entries,
+      summary: summarizeCommunicationDiff(entries),
+    };
+  });
+}
+
+/**
+ * Explicit "Add as candidate fact": the user confirms a statement they wrote is true; it becomes
+ * a USER_PROVIDED achievement (never VERIFIED) and the version is re-checked.
+ */
+export async function addClaimAsCandidateFact(actor: ActorRef, claimId: string) {
+  const claim = await withUserContext(actor.userId, (t) =>
+    t.communicationClaim.findFirst({ where: { id: claimId, userId: actor.userId } }),
+  );
+  if (!claim) throw new AppError("NOT_FOUND");
+  if (claim.claimKind !== "CANDIDATE" || claim.status === "SUPPORTED")
+    throw new AppError("VALIDATION_ERROR", {
+      publicMessage: "Only unsupported statements about you can be added as facts.",
+    });
+  const fact = await createFact(actor, "achievement", { statement: claim.text.slice(0, 1000) });
+  await runCommunicationCheck(actor, claim.versionId, { force: true });
+  return fact;
+}
+
+/** Evidence labels for a version's claims (fact labels, research claim text + source). */
+export async function claimEvidence(actor: ActorRef, versionId: string) {
+  return withUserContext(actor.userId, async (t) => {
+    const version = await ownedVersion(t, actor, versionId);
+    const evidence = await evidenceForVersion(t, actor, version, version.communication);
+    const facts = new Map(evidence.corpus.facts.map((f) => [f.ref, f]));
+    const research = new Map(evidence.corpus.research.map((r) => [r.id, r]));
+    return { facts, research, loaded: evidence };
+  });
+}
+
+// --- Pickers -------------------------------------------------------------------------------
+
+/** Jobs the user works with (matched, tailored for, bookmarked, or already written for). */
+export async function listJobOptions(actor: ActorRef, include?: string | null) {
+  return withUserContext(actor.userId, async (t) => {
+    const [matches, resumes, states, comms] = [
+      await t.jobMatch.findMany({
+        where: { userId: actor.userId, isCurrent: true },
+        select: { jobId: true },
+        orderBy: { computedAt: "desc" },
+        take: 60,
+      }),
+      await t.resume.findMany({
+        where: { userId: actor.userId, targetJobId: { not: null } },
+        select: { targetJobId: true },
+        take: 40,
+      }),
+      await t.userJobState.findMany({
+        where: { userId: actor.userId, bookmarkedAt: { not: null } },
+        select: { jobId: true },
+        take: 60,
+      }),
+      await t.communication.findMany({
+        where: { userId: actor.userId, jobId: { not: null } },
+        select: { jobId: true },
+        take: 40,
+      }),
+    ];
+    const ids = [
+      ...new Set(
+        [
+          include,
+          ...resumes.map((r) => r.targetJobId),
+          ...states.map((s) => s.jobId),
+          ...comms.map((c) => c.jobId),
+          ...matches.map((m) => m.jobId),
+        ].filter((v): v is string => Boolean(v)),
+      ),
+    ].slice(0, 120);
+    const jobs = await t.job.findMany({
+      where: {
+        id: { in: ids },
+        deletedAt: null,
+        OR: [{ visibility: "PUBLIC" }, { createdByUserId: actor.userId }],
+      },
+      select: { id: true, title: true, company: { select: { name: true } } },
+    });
+    const order = new Map(ids.map((id, i) => [id, i]));
+    return jobs
+      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      .map((j) => ({ value: j.id, label: `${j.title} — ${j.company.name}` }));
+  });
+}
+
+/** The user's resume versions: approved versions first, then each resume's working head. */
+export async function listResumeVersionOptions(actor: ActorRef) {
+  return withUserContext(actor.userId, async (t) => {
+    const versions = await t.resumeVersion.findMany({
+      where: {
+        userId: actor.userId,
+        resume: { status: "ACTIVE" },
+        OR: [{ status: "APPROVED" }, { currentOf: { isNot: null } }],
+      },
+      select: {
+        id: true,
+        versionNumber: true,
+        status: true,
+        targetJobId: true,
+        resume: { select: { name: true, kind: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 60,
+    });
+    return versions
+      .sort((a, b) => Number(b.status === "APPROVED") - Number(a.status === "APPROVED"))
+      .map((v) => ({
+        value: v.id,
+        label: `${v.resume.name} · v${v.versionNumber} (${v.status === "APPROVED" ? "approved" : v.status.toLowerCase().replace(/_/g, " ")})`,
+        targetJobId: v.targetJobId,
+        approved: v.status === "APPROVED",
+      }));
   });
 }
