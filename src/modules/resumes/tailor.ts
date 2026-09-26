@@ -4,6 +4,8 @@
  * carries a reason. The source (master) document is never mutated — a new document is built.
  */
 import { z } from "zod";
+import { optionLabel } from "@/modules/candidate/options";
+import { inferSkillCategory } from "./skill-category";
 import {
   scoreRelevance,
   textMentionsRequirement,
@@ -334,9 +336,21 @@ export function tailorDeterministic(
     }
   }
   if (added.length) {
-    const target = doc.skills.find((g) => !g.hidden);
-    if (target) target.skills = [...added, ...target.skills];
-    else doc.skills.unshift({ id: newItemId("sg"), hidden: false, label: "Skills", skills: added });
+    // Each shown skill goes into the group of its own category (React → "Web"), never simply
+    // the first group; a missing group is created and listed first (it holds job-relevant skills).
+    for (const skill of added) {
+      const fact = ctx.facts.find((x) => x.ref === skill.factRefs[0]);
+      const category =
+        typeof fact?.value.category === "string" && fact.value.category !== "OTHER"
+          ? fact.value.category
+          : inferSkillCategory(skill.name);
+      const label = optionLabel(category);
+      const group = doc.skills.find((g) => g.label.toLowerCase() === label.toLowerCase());
+      if (group) {
+        group.skills = [skill, ...group.skills];
+        group.hidden = false;
+      } else doc.skills.unshift({ id: newItemId("sg"), hidden: false, label, skills: [skill] });
+    }
     const section = doc.sections.find((s) => s.key === "skills");
     if (section) section.visible = true;
   }

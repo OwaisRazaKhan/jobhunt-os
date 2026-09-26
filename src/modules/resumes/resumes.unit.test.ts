@@ -365,6 +365,63 @@ describe("deterministic tailoring", () => {
     });
     expect(doc.sections.find((s) => s.key === "projects")!.visible).toBe(false);
   });
+  it("puts a job skill confirmed in the profile into its own category group (React → Web, not the first group)", () => {
+    const react = {
+      ref: `skill:${U(40)}`,
+      id: U(40),
+      kind: "skill",
+      value: { name: "React", category: "WEB" },
+    };
+    const uncategorised = {
+      ref: `skill:${U(41)}`,
+      id: U(41),
+      kind: "skill",
+      value: { name: "TypeScript", category: "OTHER" },
+    };
+    const reqs: AlignRequirement[] = [
+      {
+        id: "rr",
+        category: "SKILL",
+        requirementType: "REQUIRED",
+        text: "React",
+        normalizedValue: { skill: "react" },
+      },
+      {
+        id: "rt",
+        category: "SKILL",
+        requirementType: "REQUIRED",
+        text: "TypeScript",
+        normalizedValue: { skill: "typescript" },
+      },
+    ];
+    const source = build(); // built without these two facts
+    const { doc } = tailorDeterministic(source, {
+      requirements: reqs,
+      facts: [...FACTS, react, uncategorised],
+      options,
+      job: { id: "j", title: "Frontend Engineer" },
+    });
+    const web = doc.skills.find((g) => g.label === "Web")!;
+    expect(web.skills.map((s) => s.name).sort()).toEqual(["React", "TypeScript"]);
+    for (const g of doc.skills.filter((x) => x.label !== "Web"))
+      expect(g.skills.map((s) => s.name)).not.toContain("React");
+  });
+});
+
+describe("skill category inference", () => {
+  it.each([
+    ["React", "WEB"],
+    ["TypeScript", "WEB"],
+    ["Tailwind CSS", "WEB"],
+    ["API integrations", "WEB"],
+    ["Zapier", "AUTOMATION"],
+    ["Canva", "DESIGN"],
+    ["Prompt Engineering", "AI"],
+    ["Underwater basket weaving", "OTHER"],
+  ])("%s → %s", async (name, category) => {
+    const { inferSkillCategory } = await import("./skill-category");
+    expect(inferSkillCategory(name)).toBe(category);
+  });
 });
 
 describe("AI proposals are validated before use", () => {

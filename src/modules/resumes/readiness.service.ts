@@ -1,5 +1,6 @@
 import "server-only";
 import { createFact } from "@/modules/candidate/facts.service";
+import { inferSkillCategory } from "./skill-category";
 import { getMatchDetail, matchCandidateToJob } from "@/modules/matching/match.service";
 import { skillByKey } from "@/modules/matching/skills";
 import { withUserContext } from "@/server/db";
@@ -83,7 +84,10 @@ export async function confirmSkillsForJob(
     });
   const created: string[] = [];
   for (const m of chosen) {
-    await createFact(actor, "skill", { name: m.name.slice(0, 80) });
+    await createFact(actor, "skill", {
+      name: m.name.slice(0, 80),
+      category: inferSkillCategory(m.name),
+    });
     created.push(m.name);
   }
   return created;

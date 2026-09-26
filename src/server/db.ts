@@ -21,7 +21,16 @@ function createClient(): PrismaClient {
       publicMessage: "The database is not configured. See docs/setup.md.",
     });
   }
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url, max }) });
+  return new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString: url,
+      max,
+      // Retire idle connections before the database/pooler closes them (long local AI calls leave
+      // the pool idle for minutes), and keep TCP alive so dead peers are detected.
+      idleTimeoutMillis: 30_000,
+      keepAlive: true,
+    }),
+  });
 }
 
 /**
@@ -44,19 +53,38 @@ export function setDbForTests(client: PrismaClient | undefined): void {
  * user bound. Even a query that forgets its `userId` filter can only see the
  * caller's rows. Services still filter by userId explicitly (defence in depth).
  */
+/** Errors meaning the pooled connection was already dead (closed by the server/pooler). */
+export function isDeadConnectionError(error: unknown): boolean {
+  const text =
+    error instanceof Error
+      ? `${error.message} ${(error as { cause?: Error }).cause?.message ?? ""}`
+      : String(error);
+  return /Connection terminated|terminating connection|ECONNRESET|Client has encountered a connection error|connection is closed/i.test(
+    text,
+  );
+}
+
 export async function withUserContext<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (!isUuid(userId)) throw new AppError("AUTH_ERROR", { message: "Invalid user id in context" });
-  try {
-    return await getDb().$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT set_config('app.current_user_id', ${userId}, true)`;
-        await tx.$executeRawUnsafe(`SET LOCAL ROLE ${APP_DB_ROLE}`);
-        return fn(tx);
-      },
-      { maxWait: 10_000, timeout: 20_000 },
-    );
-  } catch (error) {
-    throw mapDbError(error);
+  for (let attempt = 1; ; attempt++) {
+    // True once the caller's work started: after that a retry could repeat side effects.
+    let workStarted = false;
+    try {
+      return await getDb().$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.current_user_id', ${userId}, true)`;
+          await tx.$executeRawUnsafe(`SET LOCAL ROLE ${APP_DB_ROLE}`);
+          workStarted = true;
+          return fn(tx);
+        },
+        { maxWait: 10_000, timeout: 20_000 },
+      );
+    } catch (error) {
+      // A stale pooled connection fails on the first statement, before any work ran — nothing
+      // was written, so one retry on a fresh connection is safe.
+      if (attempt === 1 && !workStarted && isDeadConnectionError(error)) continue;
+      throw mapDbError(error);
+    }
   }
 }
 

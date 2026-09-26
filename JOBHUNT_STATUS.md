@@ -64,7 +64,7 @@ Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config i
 
 | Command                               | Result                                                                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run check`                       | pass — typecheck, lint, format, **451 tests passed, 3 skipped** (34 files)                                                                |
+| `npm run check`                       | pass — typecheck, lint, format, **476 tests passed, 3 skipped** (37 files)                                                                |
 | `npm run build`                       | pass                                                                                                                                      |
 | `REAL_AI=1 npx vitest run tests/real` | passed on the local machine (Ollama `qwen3.5:9b`, Gemini `gemini-3.8-flash`); skipped where no `.env`/providers exist (e.g. Claude Cloud) |
 
@@ -72,6 +72,9 @@ Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config i
 
 - **CV AI extraction truncated:** Ollama used its default 4096-token context, cutting long JSON (a full CV) at ~2.8k output tokens → `SCHEMA_INVALID`. Now each request sets `num_ctx` (prompt estimate + output budget, capped by `OLLAMA_NUM_CTX`, default 16384), truncation (`done_reason=length`) is reported as an output-limit failure, and CV extraction / resume tailoring have 300 s timeouts. Real CV: 45 facts extracted locally (7,240 output tokens).
 - **Cloud redaction corrupted fact references:** the phone-number pattern could match digit-only UUID groups in `<kind>:<uuid>` references. UUIDs are now shielded before redaction (regression test added).
+- **Tailor page never showed results after long AI calls:** an idle pooled DB connection was closed by the server during the 60–100 s local AI call; the re-render used the dead connection (`Connection terminated unexpectedly`). The runtime pool now retires idle connections (30 s) with TCP keep-alive, and `withUserContext` retries once on a fresh connection when a transaction fails before any work ran (never after — no repeated side effects). Tests: `src/server/db.test.ts`.
+- **Confirmed skills landed in the wrong resume group:** confirming a job skill saved it with no category and tailoring put newly shown skills into the first group (React under "AI"). Confirmed skills now get a deterministic category from the skill lexicon (`skill-category.ts`) and tailoring places each skill in its own category group ("Web").
+- **Real run (owais):** CV → 45 facts approved → master resume → 6 job skills confirmed by the user → tailored for Sarvam "Frontend Engineer, Chanakya": readiness passes, Resume Check 11 passed / 0 issues; AI proposals that claimed React work or copied job wording were rejected by claim validation.
 
 ## Known issues
 
