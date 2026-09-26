@@ -12,6 +12,7 @@ import {
   type ProfileCriteria,
 } from "@/modules/search-profiles/criteria";
 import { criteriaForProfile, getSearchProfile } from "@/modules/search-profiles/profiles.service";
+import { refreshRequirementsForJobs } from "@/modules/matching/requirements/requirements.service";
 import { visibleTo } from "../jobs.repository";
 import {
   configuredBoards,
@@ -429,6 +430,13 @@ async function processBoard(
       flagged: ingested.flagged,
       closed: ingested.closed,
     });
+
+    // Requirements are derived from the job content (deterministic; unchanged jobs are skipped).
+    await refreshRequirementsForJobs(ingested.jobIds).catch((error) =>
+      logger.warn("requirement refresh failed", {
+        error: error instanceof Error ? { name: error.name } : undefined,
+      }),
+    );
 
     await setStage(actor, runId, "MATCHING_PROFILE");
     counts.matched = await matchProfile(

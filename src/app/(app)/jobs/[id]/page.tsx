@@ -14,7 +14,9 @@ import { getJob } from "@/modules/jobs/jobs.service";
 import { getJobCatalogContext } from "@/modules/jobs/search/job-detail.service";
 import { SOURCE_LABELS } from "@/modules/jobs/search/search.service";
 import { JobStateButton } from "@/modules/jobs/ui/job-state-button";
-import { getMatchForJob, listJobRequirements } from "@/modules/matching/match.service";
+import { getMatchForJob } from "@/modules/matching/match.service";
+import { ensureJobRequirements } from "@/modules/matching/requirements/requirements.service";
+import { RequirementsCard } from "@/modules/matching/ui/requirements-card";
 import { MatchPanel } from "@/modules/matching/ui/match-panel";
 import type { JobStatus, RemoteStatus, SalaryPeriod } from "@/modules/jobs/types";
 import { DeleteJobButton } from "@/modules/jobs/ui/delete-job-button";
@@ -107,9 +109,9 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
   });
   if (!result) return <NotFound />;
   const { job, canEdit } = result;
-  const [profile, requirements, match, catalog] = await Promise.all([
+  const [profile, { set: requirementSet }, match, catalog] = await Promise.all([
     getProfile(actor),
-    listJobRequirements(actor, job.id),
+    ensureJobRequirements(actor, job.id),
     getMatchForJob(actor, job.id),
     getJobCatalogContext(actor, job.id),
   ]);
@@ -171,30 +173,37 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Card>
-          <CardHeader title="Description" />
-          {/* Plain text only: React escapes it, so pasted HTML/scripts render as text. */}
-          <div className="text-fg px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap">
-            {job.description}
-          </div>
-          {job.visaTextRaw && (
-            <div className="border-border border-t px-4 py-3">
-              <p className="text-fg-muted text-xs font-medium">
-                Visa / work authorization wording (from the posting)
-              </p>
-              <p className="text-fg mt-1 text-sm break-words whitespace-pre-wrap">
-                {job.visaTextRaw}
-              </p>
-              <p className="text-fg-subtle mt-1 text-[11px]">
-                Stored as evidence only. No eligibility analysis is made.
-              </p>
+        <div className="flex min-w-0 flex-col gap-5">
+          <RequirementsCard requirements={requirementSet.requirements} set={requirementSet} />
+          <Card>
+            <CardHeader title="Description" />
+            {/* Plain text only: React escapes it, so pasted HTML/scripts render as text. */}
+            <div className="text-fg px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap">
+              {job.description}
             </div>
-          )}
-        </Card>
+            {job.visaTextRaw && (
+              <div className="border-border border-t px-4 py-3">
+                <p className="text-fg-muted text-xs font-medium">
+                  Visa / work authorization wording (from the posting)
+                </p>
+                <p className="text-fg mt-1 text-sm break-words whitespace-pre-wrap">
+                  {job.visaTextRaw}
+                </p>
+                <p className="text-fg-subtle mt-1 text-[11px]">
+                  Stored as evidence only. No eligibility analysis is made.
+                </p>
+              </div>
+            )}
+          </Card>
+        </div>
 
         <div className="flex flex-col gap-5">
           <MatchPanel
-            data={{ hasProfile: Boolean(profile), requirementCount: requirements.length, match }}
+            data={{
+              hasProfile: Boolean(profile),
+              requirementCount: requirementSet.requirements.length,
+              match,
+            }}
           />
           <Card>
             <CardHeader title="Details" />

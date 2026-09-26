@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { REQUIREMENT_KINDS, REQUIREMENT_TYPES } from "./requirements/extract";
 
 /**
  * Phase 4 matching contracts (client-safe). See docs/matching.md.
@@ -48,26 +49,8 @@ export type OverallStatus = (typeof OVERALL_STATUSES)[number];
 export const FRESHNESS = ["CURRENT", "STALE", "REQUIRES_RECALCULATION"] as const;
 export type Freshness = (typeof FRESHNESS)[number];
 
-export const REQUIREMENT_CATEGORIES = [
-  "REQUIRED_SKILL",
-  "PREFERRED_SKILL",
-  "REQUIRED_EXPERIENCE",
-  "PREFERRED_EXPERIENCE",
-  "REQUIRED_EDUCATION",
-  "PREFERRED_EDUCATION",
-  "REQUIRED_LANGUAGE",
-  "PREFERRED_LANGUAGE",
-  "WORK_AUTHORIZATION",
-  "LOCATION",
-  "WORK_MODE",
-  "EMPLOYMENT_TYPE",
-  "SALARY",
-  "CERTIFICATION",
-  "OTHER",
-] as const;
-export type RequirementCategory = (typeof REQUIREMENT_CATEGORIES)[number];
-
-export const REQUIRED_LEVELS = ["REQUIRED", "PREFERRED", "UNSPECIFIED"] as const;
+export { REQUIREMENT_KINDS, REQUIREMENT_TYPES } from "./requirements/extract";
+export type { RequirementKind, RequirementType } from "./requirements/extract";
 export const EXTRACTION_METHODS = ["RULE", "AI", "USER"] as const;
 
 /** Stable reference to a Phase 1 candidate fact: "<kind>:<uuid>". */
@@ -78,10 +61,10 @@ export const factRefSchema = z.string().regex(FACT_REF, "Invalid fact reference"
 // --- Requirements ----------------------------------------------------------------
 
 export const requirementInput = z.object({
-  category: z.enum(REQUIREMENT_CATEGORIES),
+  category: z.enum(REQUIREMENT_KINDS),
+  requirementType: z.enum(REQUIREMENT_TYPES),
   text: z.string().trim().min(1).max(500),
   normalizedValue: z.record(z.string(), z.unknown()).default({}),
-  requiredLevel: z.enum(REQUIRED_LEVELS),
   /** Verbatim wording from the job. Required: nothing is stored without traceability. */
   sourceText: z.string().trim().min(1).max(2000),
   confidence: z.number().min(0).max(1),

@@ -7,10 +7,10 @@ import { withUserContext, type Tx } from "@/server/db";
 import { AppError } from "@/server/errors";
 import type { Actor } from "@/server/session";
 import {
+  createRequirementSet,
+  findCurrentRequirementSet,
   findMatch,
   findMatches,
-  findRequirements,
-  replaceRequirements,
   upsertMatch,
 } from "./match.repository";
 import {
@@ -51,16 +51,20 @@ async function loadVisibleJob(t: Tx, actor: ActorRef, jobId: string) {
   return job;
 }
 
-// --- Requirements --------------------------------------------------------------
+// --- Requirements ------------------------------------------------------------------
 
+/** The job's current requirement set (without extracting). See requirements.service for extraction. */
 export async function listJobRequirements(actor: ActorRef, jobId: string) {
   return withUserContext(actor.userId, async (t) => {
     await loadVisibleJob(t, actor, jobId);
-    return findRequirements(t, jobId);
+    return (await findCurrentRequirementSet(t, jobId))?.requirements ?? [];
   });
 }
 
-/** Replace a job's requirements. Only the owner of a private job may write them (shared jobs: system). */
+/**
+ * Replace a private job's requirements by hand (method USER). Creates a new set version;
+ * requirements of shared jobs are maintained by the system extractor only.
+ */
 export async function replaceJobRequirements(
   actor: ActorRef,
   jobId: string,
@@ -74,11 +78,11 @@ export async function replaceJobRequirements(
         publicMessage: "Requirements of shared jobs are maintained by the system.",
       });
     }
-    return replaceRequirements(
-      t,
-      jobId,
-      rows.map((r) => ({ ...r, normalizedValue: r.normalizedValue as object })),
-    );
+    return createRequirementSet(t, jobId, {
+      extractorVersion: "user",
+      jobContentHash: job.contentHash,
+      rows: rows.map((r) => ({ ...r, normalizedValue: r.normalizedValue as object })),
+    });
   });
 }
 
@@ -117,13 +121,13 @@ export async function candidateSnapshotHash(t: Tx, actor: ActorRef): Promise<str
   return sha256Hex(JSON.stringify(parts));
 }
 
+/** Job side of a match: its content plus the exact requirement set version used. */
 async function jobSnapshotHash(t: Tx, jobId: string, jobContentHash: string): Promise<string> {
-  const reqs = await t.jobRequirement.findMany({
-    where: { jobId },
-    select: { id: true, updatedAt: true },
-    orderBy: { id: "asc" },
+  const set = await t.jobRequirementSet.findFirst({
+    where: { jobId, isCurrent: true },
+    select: { id: true, version: true },
   });
-  return sha256Hex(JSON.stringify([jobContentHash, reqs]));
+  return sha256Hex(JSON.stringify([jobContentHash, set?.id ?? null, set?.version ?? null]));
 }
 
 export function computeFreshness(
@@ -217,7 +221,7 @@ export async function saveMatchResult(actor: ActorRef, jobId: string, raw: Match
       });
     if (requirementIds.size > 0) {
       const found = await t.jobRequirement.count({
-        where: { jobId, id: { in: [...requirementIds] } },
+        where: { jobId, id: { in: [...requirementIds] }, set: { isCurrent: true } },
       });
       if (found !== requirementIds.size) {
         throw new AppError("VALIDATION_ERROR", {

@@ -5,22 +5,50 @@ import type { Dimension } from "./types";
 
 /** Persistence for requirements and match results. All queries are user-scoped (and RLS-enforced). */
 
-export function findRequirements(tx: Tx, jobId: string) {
-  return tx.jobRequirement.findMany({
-    where: { jobId },
-    orderBy: [{ category: "asc" }, { createdAt: "asc" }],
+export function findCurrentRequirementSet(tx: Tx, jobId: string) {
+  return tx.jobRequirementSet.findFirst({
+    where: { jobId, isCurrent: true },
+    include: { requirements: { orderBy: { position: "asc" } } },
   });
 }
 
-export async function replaceRequirements(
+export type RequirementRow = Omit<
+  Prisma.JobRequirementUncheckedCreateInput,
+  "jobId" | "setId" | "position" | "id"
+>;
+
+/**
+ * Creates the next numbered set for a job and makes it current. The previous set is kept
+ * (superseded), so earlier match results stay traceable to the exact requirements used.
+ */
+export async function createRequirementSet(
   tx: Tx,
   jobId: string,
-  rows: Omit<Prisma.JobRequirementUncheckedCreateInput, "jobId">[],
+  input: { extractorVersion: string; jobContentHash: string; rows: RequirementRow[] },
 ) {
-  await tx.jobRequirement.deleteMany({ where: { jobId } });
-  if (rows.length > 0)
-    await tx.jobRequirement.createMany({ data: rows.map((r) => ({ ...r, jobId })) });
-  return findRequirements(tx, jobId);
+  const last = await tx.jobRequirementSet.findFirst({
+    where: { jobId },
+    orderBy: { version: "desc" },
+    select: { version: true },
+  });
+  await tx.jobRequirementSet.updateMany({
+    where: { jobId, isCurrent: true },
+    data: { isCurrent: false },
+  });
+  const set = await tx.jobRequirementSet.create({
+    data: {
+      jobId,
+      version: (last?.version ?? 0) + 1,
+      extractorVersion: input.extractorVersion,
+      jobContentHash: input.jobContentHash,
+      requirementCount: input.rows.length,
+    },
+  });
+  if (input.rows.length)
+    await tx.jobRequirement.createMany({
+      data: input.rows.map((r, position) => ({ ...r, jobId, setId: set.id, position })),
+    });
+  return findCurrentRequirementSet(tx, jobId);
 }
 
 export function findMatch(tx: Tx, userId: string, jobId: string) {

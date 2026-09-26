@@ -33,6 +33,11 @@ Migration `20260929000000_phase3_job_search`: generated `jobs.search_vector` (ts
 filter/sort indexes, owner-only `user_job_states` (bookmark / hide) and `saved_searches`.
 Details: [job-search.md](./job-search.md).
 
+## 0d. Phase 4 Checkpoint 1 (requirement sets)
+
+Migration `20260930000000_phase4_requirement_sets`: versioned `job_requirement_sets`; `job_requirements`
+gains `set_id`, `position` and a separate `requirement_type`. Details: [matching.md](./matching.md).
+
 ## 1. Conventions
 
 | Topic            | Rule                                                                                                                                                                                              |

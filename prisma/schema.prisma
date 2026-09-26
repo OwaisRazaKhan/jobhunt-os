@@ -816,6 +816,7 @@ model Job {
   createdBy User?      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
 
   requirements        JobRequirement[]
+  requirementSets     JobRequirementSet[]
   matches             JobMatch[]
   postings            JobSourcePosting[]
   categoryAssignments JobCategoryAssignment[]
@@ -1178,14 +1179,17 @@ model SourceSyncRun {
 model JobRequirement {
   id               String   @id @default(uuid(7)) @db.Uuid
   jobId            String   @map("job_id") @db.Uuid
-  /// REQUIRED_SKILL | PREFERRED_SKILL | REQUIRED_EXPERIENCE | ... (see CHECK)
+  setId            String   @map("set_id") @db.Uuid
+  /// Order within the set (structured fields first, then description order)
+  position         Int      @default(0)
+  /// SKILL | EXPERIENCE | EDUCATION | LOCATION | WORK_MODE | EMPLOYMENT | SALARY | AUTHORIZATION | LANGUAGE | CERTIFICATION | DOMAIN | PORTFOLIO | OTHER
   category         String
   /// Short human-readable requirement, e.g. "React" or "2+ years marketing"
   text             String
   /// Machine-usable structure for evaluators (validated by Zod per category)
   normalizedValue  Json     @default("{}") @map("normalized_value")
-  /// REQUIRED | PREFERRED | UNSPECIFIED
-  requiredLevel    String   @map("required_level")
+  /// REQUIRED | PREFERRED | INFORMATIONAL | UNKNOWN
+  requirementType  String   @map("requirement_type")
   /// Original wording from the job, verbatim
   sourceText       String   @map("source_text")
   confidence       Float
@@ -1197,10 +1201,32 @@ model JobRequirement {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  set JobRequirementSet @relation(fields: [setId], references: [id], onDelete: Cascade)
 
   @@index([jobId, category])
+  @@index([setId, position])
   @@map("job_requirements")
+}
+
+/// Phase 4: one immutable, numbered extraction of a job's requirements.
+model JobRequirementSet {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  jobId            String   @map("job_id") @db.Uuid
+  version          Int
+  /// e.g. "rules-1", "user", "legacy"
+  extractorVersion String   @map("extractor_version")
+  /// jobs.content_hash the set was extracted from (a different hash = job changed)
+  jobContentHash   String   @map("job_content_hash") @db.Char(64)
+  isCurrent        Boolean  @default(true) @map("is_current")
+  requirementCount Int      @default(0) @map("requirement_count")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  requirements JobRequirement[]
+
+  @@unique([jobId, version])
+  @@map("job_requirement_sets")
 }
 
 model JobMatch {
