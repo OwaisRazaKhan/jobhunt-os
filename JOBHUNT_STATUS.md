@@ -5,11 +5,11 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-26** — Phase 7 (Communication Studio) Checkpoint 1: data model, migration (applied), service layer, quality engine and `/communications` dashboard. Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-26** — Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job (not approved, not exported, nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 7 — Communication Studio: Checkpoint 1 done, awaiting inspection** (Phase 6 built and used on real data)                                                                |
+| Current phase       | **Phase 7 — Communication Studio: built, awaiting your review/approval of the real drafts** (Phase 6 built and used on real data)                                               |
 | Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
@@ -30,7 +30,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 | 5     | Complete | SSRF-safe research fetcher with robots.txt, claims with evidence, company resolution, exports (`docs/research.md`)                                                 |
 | 6     | Built    | Resume Studio: versions + content hash, editor, tailoring + claim validation, Resume Check, approval, PDF/DOCX export (`docs/resume-studio.md`); awaiting approval |
 
-| 7 | CP1 done | Communication Studio data model + RLS, document schemas, content hash, quality engine, services, `/communications` (`docs/communication-studio.md`); no sending of any kind |
+| 7 | Built | Communication Studio: emails + cover letters, AI drafting (`email.generate` / `cover_letter.generate`, Ollama by default), claim validation with provenance, quality engine, versions/compare/restore, approval gate, PDF/DOCX/TXT export, job + resume entry points (`docs/communication-studio.md`); no sending of any kind |
 
 | AI | Complete | Provider registry, task registry + sensitivity, privacy routing, orchestrator (`runAiTask`) used by all 4 AI call sites, `/settings/ai`; real tests passed with `qwen3.5:9b` and `gemini-3.8-flash` |
 
@@ -47,7 +47,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
   service role and short-lived signed URLs).
 - Real data present (preserve it): 3 users, 1,721 jobs (all PUBLIC catalog), 1,721 source postings,
   2,735 job requirements, 45 matches, 2 search profiles, 5 discovery runs, 39 sync runs, 1 candidate profile,
-  1 stored document, 106 audit records. Research tables are empty (not run on real data yet).
+  1 stored document, 106 audit records (counts from the earlier re-sync). Since then (owais): job research v1 for the Sarvam job (25 verified claims from the posting), 2 communications (application email v3, cover letter v2 — AI drafts, not approved).
 
 ## Scheduling
 
@@ -62,11 +62,18 @@ Optional, unset: `SEARXNG_URL` (research web search; without it the company webs
 user), `GOOGLE_CLIENT_ID/SECRET`, `CRON_MAX_PROFILES`, `RESEARCH_*` limits (defaults apply).
 Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config is read via `src/config/env.ts`.
 
-## Validation (2026-09-26, after the AI orchestration fix-up)
+**Database host (2026-09-26):** the direct host `db.<ref>.supabase.co` is IPv6-only and this network lost its IPv6
+route (`Can't reach database server`). `DATABASE_URL` / `DIRECT_URL` in the local `.env` now use the Supabase **session
+pooler** (`aws-0-ap-south-1.pooler.supabase.com:5432`, user `postgres.<ref>`, IPv4, same password); the original
+direct URLs are kept as comments in `.env` (backup: `.data/.env.before-pooler`). Session mode supports the
+transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads are slower through the pooler
+(~10–15 s on dev for the communication workspace); switch back to the direct URLs when IPv6 works again.
+
+## Validation (2026-09-26, after Phase 7)
 
 | Command                               | Result                                                                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run check`                       | pass — typecheck, lint, format, **476 tests passed, 3 skipped** (37 files)                                                                |
+| `npm run check`                       | pass — typecheck, lint, format, **525 tests passed, 3 skipped** (41 files)                                                                |
 | `npm run build`                       | pass                                                                                                                                      |
 | `REAL_AI=1 npx vitest run tests/real` | passed on the local machine (Ollama `qwen3.5:9b`, Gemini `gemini-3.8-flash`); skipped where no `.env`/providers exist (e.g. Claude Cloud) |
 
@@ -78,16 +85,30 @@ Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config i
 - **Confirmed skills landed in the wrong resume group:** confirming a job skill saved it with no category and tailoring put newly shown skills into the first group (React under "AI"). Confirmed skills now get a deterministic category from the skill lexicon (`skill-category.ts`) and tailoring places each skill in its own category group ("Web").
 - **Real run (owais):** CV → 45 facts approved → master resume → 6 job skills confirmed by the user → tailored for Sarvam "Frontend Engineer, Chanakya": readiness passes, Resume Check 11 passed / 0 issues; AI proposals that claimed React work or copied job wording were rejected by claim validation.
 
+## Phase 7 real run (2026-09-26, owais, Sarvam "Frontend Engineer, Chanakya")
+
+- Job research run on the posting (Phase 5, public source only) → research v1, 25 verified claims.
+- Application email and cover letter drafted locally by Ollama `qwen3.5:9b` via the orchestrator (30–77 s),
+  using the approved tailored resume and the strong match. Every factual sentence was traced to a candidate
+  fact, the approved resume or the posting. Cover letter check: 0 critical, 7 statements (6 supported, 1 partly
+  supported — flagged for your review), 1 statement removed. Email: 0 critical, 2 partly supported statements.
+- The review fixed the system: greeting/closing lines inside the AI body, intent sentences counted as claims,
+  job-posting names flagged as unknown, a check transaction that could exceed 20 s (claims now batch-inserted,
+  reads and writes split).
+- Not approved, not exported, nothing sent — approval is the candidate's decision.
+
 ## Known issues
 
 - **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and
   `format:check` failed on 137 files. `.gitattributes` now forces LF; no content changed.
 - Gemini may return temporary 503 "high demand"; shown as "busy, try again", never retried in a loop.
-- The signed-in `owais` account has no candidate profile or facts yet, so matching shows "Complete your
-  candidate profile" and Resume Studio asks for the profile first (it builds resumes only from real facts). The existing matches belong to another account (per-user isolation working as designed).
+- IPv6 outage on this network: see Environment (pooler in use).
+- Phase 7 limitations: `docs/communication-studio.md` §13 (lexical claim auditor, in-request generation).
+- The pg adapter logs a deprecation warning ("client.query() when the client is already executing a query");
+  harmless, shown by the Next dev overlay as "1 issue".
 - Documented limitations: `docs/matching.md` and `docs/research.md` → "Known limitations"
   (in-process batches/rate limits, no headless browser for research).
 
 ## Next phase
 
-**Phase 7 — Checkpoint 2** (after inspection of CP1): communication editor and AI generation via `runAiTask` (`email.generate` / `cover_letter.generate`, private data local by default), claim validation. See `docs/communication-studio.md` §1.
+**Phase 8 — Application System** (after Phase 7 approval): applications, state machine, approvals, board/timeline, manual "I submitted" tracking. It consumes approved resume / cover letter / email versions and their content hashes (`docs/communication-studio.md` §10). No automated submission or sending.
