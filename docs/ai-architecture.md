@@ -1,10 +1,110 @@
 # AI Architecture
 
-Status: design. Nothing in this document is implemented in Phase 0.
-
 ---
 
-> **Phase 1 status:** implemented the AI service → router → **Ollama adapter** (local, free) for the Candidate Agent only. Tasks with personal data are routed to local providers exclusively. Structured output uses the Ollama JSON-schema `format` parameter; output is Zod-validated, grounded (the excerpt must appear in the document) and stored in `ai_generations` (metadata plus validated output, never prompts). The model is set by `OLLAMA_MODEL`. The cloud-provider tiers below remain the long-term design.
+> **Implemented (AI orchestration, migration `20261012000000_ai_orchestration`):** see §0 below. Sections 1–7
+> are the original long-term design; where they differ from §0 (e.g. the Anthropic/OpenAI tiers, monthly
+> budgets, embeddings), §0 is what the code does today.
+
+## 0. Implemented AI layer
+
+### 0.1 Files
+
+| File                                | Role                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `src/server/ai/types.ts`            | Provider contract (`AiProvider`), requests/responses, `AiErrorKind`, `AiTask`                          |
+| `src/server/ai/registry.ts`         | Task registry: sensitivity, allowed/default providers, fallback, retries, output limits, planned tasks |
+| `src/server/ai/router.ts`           | Configured providers + privacy/preference routing → ordered permitted providers                        |
+| `src/server/ai/privacy.ts`          | Identifier redaction for cloud requests; untrusted-content rule                                        |
+| `src/server/ai/preferences.ts`      | Per-user preferences (`ai_preferences`, RLS) with explicit, timestamped private-cloud consent          |
+| `src/server/ai/orchestrator.ts`     | `runAiTask` (the only entry point), provider test, recent activity, health                             |
+| `src/server/ai/errors.ts`           | Classified errors, plain-language messages, retryable/unavailable sets, secret redaction               |
+| `src/server/ai/providers/ollama.ts` | Local provider (`/api/chat` + JSON-schema `format`; `think:false` for thinking models)                 |
+| `src/server/ai/providers/gemini.ts` | Optional cloud provider (official `@google/genai` SDK)                                                 |
+| `src/app/(app)/settings/ai/`        | `/settings/ai`: status, tests, routing table, preferences, recent activity                             |
+
+Call sites (all through `runAiTask`): CV extraction (`candidate/extraction/ai-extract.ts`), match assist
+(`matching/semantic.ts`), research synthesis (`research/synthesis.ts`), resume tailoring
+(`resumes/tailor.service.ts`). No business module imports a provider.
+
+### 0.2 Task registry
+
+| Task                       | Phase | Sensitivity       | Default              | Allowed        | Fallback      | Retries | Max output |
+| -------------------------- | ----- | ----------------- | -------------------- | -------------- | ------------- | ------- | ---------- |
+| `candidate.extract_facts`  | 1     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | rules         | 1       | 6000       |
+| `matching.semantic_skills` | 4     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | deterministic | 1       | 2000       |
+| `research.synthesize`      | 5     | PUBLIC            | `AI_PUBLIC_PROVIDER` | gemini, ollama | evidence only | 1       | 8000       |
+| `resume.tailor`            | 6     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | deterministic | 1       | 4000       |
+
+Planned (declared, not routable until built): job requirement extraction, resume quality analysis,
+cover letter, email (PRIVATE_CANDIDATE), application answers (HIGH_SENSITIVITY).
+
+### 0.3 Privacy routing (applied before preferences; cannot be overridden by the client)
+
+| Sensitivity       | Ollama | Gemini                                                                                                                                             |
+| ----------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PUBLIC            | yes    | yes, unless the user turned off "Gemini for public tasks"                                                                                          |
+| INTERNAL          | yes    | yes                                                                                                                                                |
+| PRIVATE_CANDIDATE | yes    | only if `AI_ALLOW_PRIVATE_GEMINI=true` **and** the user opted in on `/settings/ai` (consent timestamped, audited; DB check requires the timestamp) |
+| HIGH_SENSITIVITY  | yes    | never                                                                                                                                              |
+
+Every request to a cloud provider passes the privacy filter first: the user's name, email and phone, and any
+email address or 9+-digit phone-like number, are replaced (`[CANDIDATE]`, `[EMAIL]`, `[PHONE]`). Local
+requests are not rewritten. Tasks with third-party content get the untrusted-content rule in the system prompt.
+
+### 0.4 Orchestration
+
+`runAiTask`: registry policy → preferences → route → (cloud: redact) → provider → JSON → Zod → record in
+`ai_generations` (provider, model, prompt key/version, input hash, output hash, validated output, status,
+error kind, tokens, latency, sensitivity, attempt, route reason — **never prompts**) → caller-side
+validation (fact references, evidence citations, claim checks).
+
+- **Retries:** bounded by the task (`maxRetries`, 1), only for TIMEOUT, NETWORK_ERROR, GENERATION_FAILED,
+  MODEL_LOADING. Quota, invalid key, missing model, rate limiting ("busy, try again") and policy denials are
+  never retried. INVALID_OUTPUT is never retried or re-routed: the caller's deterministic path runs.
+- **Fallback:** only to another _permitted_ provider, only when the user enabled "automatic fallback", only
+  for "unavailable" kinds. Otherwise the task's non-AI fallback runs (rules / deterministic / evidence only).
+- **Cache:** PUBLIC + cacheable tasks only, per user, same task + prompt version + input hash, 7 days.
+- **Gemini:** the SDK is created with `retryOptions.attempts = 1` (it would otherwise retry 429 up to 5
+  times). Gemini 3.x thinking tokens count toward `maxOutputTokens`, so `GEMINI_THINKING_HEADROOM` (2048)
+  is added to each task limit; an empty answer with `finishReason=MAX_TOKENS` is INVALID_OUTPUT. 503 "high
+  demand" is classified RATE_LIMITED. Health = model metadata call (no tokens).
+- **Ollama:** health = `/api/tags`, version and loaded models; thinking models called with `think:false`;
+  models are never pulled automatically.
+
+### 0.5 Error kinds
+
+NOT_CONFIGURED · OFFLINE · MODEL_MISSING · MODEL_LOADING · INVALID_API_KEY · QUOTA_EXCEEDED · RATE_LIMITED ·
+MODEL_UNAVAILABLE · NETWORK_ERROR · TIMEOUT · GENERATION_FAILED · INVALID_OUTPUT · POLICY_DENIED — each with a
+plain-language message (`AI_ERROR_MESSAGES`). Keys are redacted from any error text before logs or UI.
+
+### 0.6 Environment (`src/config/env.ts`)
+
+| Variable                                                 | Default                                           | Meaning                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
+| `AI_ENABLED`                                             | `true`                                            | Master switch                                                           |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` / `OLLAMA_TIMEOUT_MS` | `http://127.0.0.1:11434` / `llama3.1:8b` / 120000 | Local provider (in use: `qwen3.5:9b`)                                   |
+| `AI_DEFAULT_PROVIDER`                                    | `ollama`                                          | Default for non-public tasks with `default` routing                     |
+| `AI_PUBLIC_PROVIDER`                                     | `gemini`                                          | Default for PUBLIC tasks                                                |
+| `AI_ALLOW_PRIVATE_GEMINI`                                | `false`                                           | Operator switch; required (with user opt-in) for private data on Gemini |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` / `GEMINI_TIMEOUT_MS`  | unset / `gemini-3.8-flash` / 60000                | Optional cloud provider; server-only, never `NEXT_PUBLIC_`              |
+
+### 0.7 Data
+
+Migration `20261012000000_ai_orchestration`: `ai_generations` + `attempt`, `output_hash`, `prompt_key`,
+`route_reason`, `sensitivity` (CHECK constraint, cache index); new `ai_preferences` (primary provider,
+Gemini for public, private-cloud opt-in + consent time, auto-fallback; owner-only RLS). Audit:
+`ai_preferences_updated`, `private_cloud_ai_enabled/disabled`, `ai_provider_tested`.
+
+### 0.8 Testing
+
+- `npm test`: unit tests for both adapters (classification, headroom, no SDK retries, redaction), router
+  privacy matrix, orchestrator retries/fallback/cache, and each call site with fake providers.
+- `REAL_AI=1 npx vitest run tests/real`: real providers from `.env` against an isolated test DB with
+  SYNTHETIC facts — Ollama resume tailoring (injected "Python"/"300% growth" blocked), Gemini research
+  synthesis (injected claim ignored), Gemini private-data test with explicit opt-in. Skipped (not failed)
+  when `REAL_AI` is unset or no `.env` exists.
+- `/settings/ai` "Test" buttons send a tiny non-personal request and record it as `system.provider_test`.
 
 ## 1. Goals
 

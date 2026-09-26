@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resetServerEnvCache } from "@/config/env";
 import { synthesize } from "@/modules/research/synthesis";
@@ -18,6 +18,8 @@ const REAL = process.env.REAL_AI === "1";
 
 function envFromFile(keys: string[]): Record<string, string> {
   const out: Record<string, string> = {};
+  // No .env (CI, fresh checkout): nothing configured → the real tests are skipped, not crashed.
+  if (!existsSync(".env")) return out;
   for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
     const m = line.match(/^([A-Z_]+)=(.*)$/);
     if (m && keys.includes(m[1]!)) out[m[1]!] = m[2]!.trim().replace(/^["']|["']$/g, "");
@@ -123,7 +125,7 @@ describe.skipIf(!REAL)("REAL providers", () => {
         orderBy: { createdAt: "desc" },
       }),
     );
-    console.log(
+    console.warn(
       `[REAL OLLAMA] aiStatus=${res.aiStatus} provider=${res.changeSet.provider} model=${res.changeSet.model} accepted=${res.changeSet.changes.filter((c) => c.kind === "REWRITTEN" || c.kind === "SUMMARY").length} review=${res.changeSet.needsReview.length} rejected=${res.changeSet.rejected.length} generation=${gen?.status}/${gen?.provider}/${gen?.model} ${gen?.latencyMs}ms stages=${res.stages.map((s) => `${s.key}:${s.status}:${s.ms}ms`).join(",")}`,
     );
     expect(gen).toMatchObject({ provider: "ollama", sensitivity: "PRIVATE_CANDIDATE" });
@@ -175,7 +177,7 @@ describe.skipIf(!REAL)("REAL providers", () => {
         companyName: "Real Test Co",
         drafts,
       });
-      console.log(`[REAL GEMINI] claims=${JSON.stringify(out.accepted.map((c) => c.claim))}`);
+      console.warn(`[REAL GEMINI] claims=${JSON.stringify(out.accepted.map((c) => c.claim))}`);
       const g = await withUserContext(user.userId, (t) =>
         t.aiGeneration.findMany({
           where: { task: "research.synthesize" },
@@ -183,8 +185,8 @@ describe.skipIf(!REAL)("REAL providers", () => {
           select: { provider: true, status: true, errorCode: true, attempt: true, latencyMs: true },
         }),
       );
-      console.log(`[REAL GEMINI] generations=${JSON.stringify(g)}`);
-      console.log(
+      console.warn(`[REAL GEMINI] generations=${JSON.stringify(g)}`);
+      console.warn(
         `[REAL GEMINI] status=${out.status} provider=${out.provider} model=${out.model} accepted=${out.accepted.length} rejected=${out.rejected.length}`,
       );
       expect(out.provider).toBe("gemini");
@@ -208,7 +210,7 @@ describe.skipIf(!REAL)("REAL providers", () => {
       const version = await withUserContext(user.userId, (t) =>
         t.resumeVersion.findUniqueOrThrow({ where: { id: res.resumeVersionId } }),
       );
-      console.log(
+      console.warn(
         `[REAL GEMINI PRIVATE] aiStatus=${res.aiStatus} provider=${res.changeSet.provider} model=${res.changeSet.model} accepted=${res.changeSet.changes.filter((c) => c.kind === "REWRITTEN" || c.kind === "SUMMARY").length} review=${res.changeSet.needsReview.length} rejected=${res.changeSet.rejected.length}`,
       );
       const text = JSON.stringify(version.content);

@@ -5,18 +5,18 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-26** — Phase 6 (Resume Studio) built and migrated. Earlier the same day: re-sync after Claude Cloud work (commits `5d844f7` … `949c944`).
+**2026-09-26** — AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
-| Item                | State                                                                                                                                           |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 6 — Resume Studio: built, awaiting approval**                                                                                           |
-| Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                |
-| Partially completed | none                                                                                                                                            |
-| Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                |
-| Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                        |
-| Migrations          | 10 local = 10 applied (`20261010000000_phase6_resume_studio` added)                                                                             |
-| Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`) |
-| AI                  | local Ollama only (`llama3.1:8b`); optional — every feature works without it                                                                    |
+| Item                | State                                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current phase       | **Phase 6 — Resume Studio: built, awaiting approval**                                                                                                                           |
+| Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
+| Partially completed | none                                                                                                                                                                            |
+| Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
+| Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
+| Migrations          | 11 in the repo, all applied on JOBHUNTOS (latest `20261012000000_ai_orchestration`)                                                                                             |
+| Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
+| AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
 ## Phase state (verified)
 
@@ -29,6 +29,8 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 | 4     | Complete | versioned requirement sets, deterministic evidence-first engine, history, batches, optional AI assist (`docs/matching.md`)                                         |
 | 5     | Complete | SSRF-safe research fetcher with robots.txt, claims with evidence, company resolution, exports (`docs/research.md`)                                                 |
 | 6     | Built    | Resume Studio: versions + content hash, editor, tailoring + claim validation, Resume Check, approval, PDF/DOCX export (`docs/resume-studio.md`); awaiting approval |
+
+| AI | Complete | Provider registry, task registry + sensitivity, privacy routing, orchestrator (`runAiTask`) used by all 4 AI call sites, `/settings/ai`; real tests passed with `qwen3.5:9b` and `gemini-3.8-flash` |
 
 ## Database (JOBHUNTOS, verified live)
 
@@ -57,21 +59,19 @@ Optional, unset: `SEARXNG_URL` (research web search; without it the company webs
 user), `GOOGLE_CLIENT_ID/SECRET`, `CRON_MAX_PROFILES`, `RESEARCH_*` limits (defaults apply).
 Only `NEXT_PUBLIC_APP_URL` is client-exposed (not a secret). All server config is read via `src/config/env.ts`.
 
-## Validation (2026-09-26, after Phase 6)
+## Validation (2026-09-26, after the AI orchestration fix-up)
 
-| Command                | Result                                                        |
-| ---------------------- | ------------------------------------------------------------- |
-| `npm run typecheck`    | pass                                                          |
-| `npm run lint`         | pass                                                          |
-| `npm run format:check` | pass (after `.gitattributes` LF fix — see below)              |
-| `npm test`             | 31 files, **422 tests passed** (baseline before Phase 6: 383) |
-| `npm run build`        | pass (50 routes)                                              |
+| Command                               | Result                                                                                                                                    |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run check`                       | pass — typecheck, lint, format, **451 tests passed, 3 skipped** (34 files)                                                                |
+| `npm run build`                       | pass                                                                                                                                      |
+| `REAL_AI=1 npx vitest run tests/real` | passed on the local machine (Ollama `qwen3.5:9b`, Gemini `gemini-3.8-flash`); skipped where no `.env`/providers exist (e.g. Claude Cloud) |
 
 ## Known issues
 
 - **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and
   `format:check` failed on 137 files. `.gitattributes` now forces LF; no content changed.
-- Ollama is not running on this machine → AI assistance shows "Offline"; deterministic paths work.
+- Gemini may return temporary 503 "high demand"; shown as "busy, try again", never retried in a loop.
 - The signed-in `owais` account has no candidate profile or facts yet, so matching shows "Complete your
   candidate profile" and Resume Studio asks for the profile first (it builds resumes only from real facts). The existing matches belong to another account (per-user isolation working as designed).
 - Documented limitations: `docs/matching.md` and `docs/research.md` → "Known limitations"
