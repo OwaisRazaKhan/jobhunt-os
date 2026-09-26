@@ -188,3 +188,17 @@ describe("ownership and RLS", () => {
     expect((await ensureJobRequirements(userB, privateJobB)).extracted).toBe(false);
   });
 });
+
+describe("pending migration detection", () => {
+  it("recognises a missing table as 'database behind the code'", async () => {
+    const { isSchemaOutOfDate } = await import("@/server/db");
+    await db.pg.exec(`ALTER TABLE "job_requirement_sets" RENAME TO "job_requirement_sets_off"`);
+    try {
+      const error = await ensureJobRequirements(userA, publicJob).catch((e: unknown) => e);
+      expect(isSchemaOutOfDate(error)).toBe(true);
+    } finally {
+      await db.pg.exec(`ALTER TABLE "job_requirement_sets_off" RENAME TO "job_requirement_sets"`);
+    }
+    expect(isSchemaOutOfDate(new Error("connection refused"))).toBe(false);
+  });
+});

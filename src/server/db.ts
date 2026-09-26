@@ -129,3 +129,18 @@ export function mapDbError(error: unknown): unknown {
   }
   return error;
 }
+
+/**
+ * True when an error means the database is behind the code (a migration has not been
+ * applied yet): Prisma P2021 (table missing) / P2022 (column missing), possibly wrapped.
+ */
+export function isSchemaOutOfDate(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e && depth < 5; depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (code === "P2021" || code === "P2022") return true;
+    if (e instanceof Error && /does not exist in the current database/i.test(e.message))
+      return true;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return false;
+}

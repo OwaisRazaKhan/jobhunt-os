@@ -21,7 +21,9 @@ import { MatchPanel } from "@/modules/matching/ui/match-panel";
 import type { JobStatus, RemoteStatus, SalaryPeriod } from "@/modules/jobs/types";
 import { DeleteJobButton } from "@/modules/jobs/ui/delete-job-button";
 import { JobStatusBadge, RemoteBadge } from "@/modules/jobs/ui/job-badges";
+import { isSchemaOutOfDate } from "@/server/db";
 import { AppError } from "@/server/errors";
+import { logger } from "@/server/logger";
 import { requireActorOrRedirect } from "@/server/session";
 
 export const metadata: Metadata = { title: "Job · JOBHUNT OS" };
@@ -109,9 +111,20 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
   });
   if (!result) return <NotFound />;
   const { job, canEdit } = result;
-  const [profile, { set: requirementSet }, match, catalog] = await Promise.all([
+  const [profile, requirementResult, match, catalog] = await Promise.all([
     getProfile(actor),
-    ensureJobRequirements(actor, job.id),
+    // A failing requirements step must not take the whole job page down.
+    ensureJobRequirements(actor, job.id).then(
+      (r) => ({ set: r.set, problem: null }),
+      (error: unknown) => {
+        const problem = isSchemaOutOfDate(error) ? ("migration" as const) : ("error" as const);
+        logger.error("job requirements unavailable", {
+          problem,
+          error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        });
+        return { set: null, problem };
+      },
+    ),
     getMatchForJob(actor, job.id),
     getJobCatalogContext(actor, job.id),
   ]);
@@ -174,7 +187,11 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-5">
-          <RequirementsCard requirements={requirementSet.requirements} set={requirementSet} />
+          <RequirementsCard
+            requirements={requirementResult.set?.requirements ?? []}
+            set={requirementResult.set}
+            problem={requirementResult.problem}
+          />
           <Card>
             <CardHeader title="Description" />
             {/* Plain text only: React escapes it, so pasted HTML/scripts render as text. */}
@@ -201,7 +218,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
           <MatchPanel
             data={{
               hasProfile: Boolean(profile),
-              requirementCount: requirementSet.requirements.length,
+              requirementCount: requirementResult.set?.requirements.length ?? 0,
               match,
             }}
           />

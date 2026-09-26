@@ -14,7 +14,7 @@ import { findSkills, skillByKey } from "../skills";
  *  - Job text is untrusted: it is only pattern-matched and stored as text.
  */
 
-export const EXTRACTOR_VERSION = "rules-2";
+export const EXTRACTOR_VERSION = "rules-3";
 
 export const REQUIREMENT_TYPES = ["REQUIRED", "PREFERRED", "INFORMATIONAL", "UNKNOWN"] as const;
 export type RequirementType = (typeof REQUIREMENT_TYPES)[number];

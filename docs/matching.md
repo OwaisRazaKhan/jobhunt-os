@@ -38,7 +38,7 @@ Migration `20260930000000_phase4_requirement_sets`.
   the system; owners may write sets for their own private jobs (method USER). Users can never write
   sets for shared jobs (tested).
 
-### Extraction (`src/modules/matching/requirements/extract.ts`, `rules-2`)
+### Extraction (`src/modules/matching/requirements/extract.ts`, `rules-3`)
 
 Deterministic, no AI. Job text is untrusted and only pattern-matched.
 

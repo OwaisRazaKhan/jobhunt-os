@@ -71,10 +71,37 @@ function sourceLabel(ref: string) {
 export function RequirementsCard({
   requirements,
   set,
+  problem = null,
 }: {
   requirements: RequirementItem[];
   set: { version: number; extractorVersion: string; createdAt: Date } | null;
+  /** Requirements could not be loaded: a pending database migration, or another error */
+  problem?: "migration" | "error" | null;
 }) {
+  if (problem) {
+    return (
+      <Card>
+        <CardHeader title="Job requirements" />
+        <div role="alert" className="flex flex-col gap-1 px-4 py-4 text-sm">
+          {problem === "migration" ? (
+            <>
+              <p className="text-warning font-medium">The database needs an update.</p>
+              <p className="text-fg-muted">
+                Requirements use tables from a newer migration that has not been applied yet. Run{" "}
+                <code className="text-fg font-mono text-xs">npm run db:migrate:deploy</code> and
+                restart the app.
+              </p>
+            </>
+          ) : (
+            <p className="text-fg-muted">
+              Requirements could not be loaded right now. The rest of this job is unaffected —
+              reload to try again.
+            </p>
+          )}
+        </div>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader
