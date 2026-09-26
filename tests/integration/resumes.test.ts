@@ -155,7 +155,7 @@ function fakeProvider(
       return { json: respond(req), usage: {}, model: "fake-model" };
     },
     async health() {
-      return { ok: true, model: "fake-model", modelAvailable: true };
+      return { ok: true, model: "fake-model", modelAvailable: true, status: "READY" as const };
     },
   };
 }

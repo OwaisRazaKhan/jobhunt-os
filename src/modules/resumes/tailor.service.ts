@@ -1,7 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { isAiConfigured } from "@/server/ai/router";
-import { generateStructured } from "@/server/ai/service";
+import { getAiRoute, routeUnavailableReason, runAiTask } from "@/server/ai/orchestrator";
 import { recordAudit } from "@/server/audit";
 import { sha256Hex } from "@/server/crypto";
 import { withUserContext } from "@/server/db";
@@ -189,14 +188,15 @@ export async function tailorResumeToJob(actor: ActorRef, raw: TailorInput): Prom
   const wantsAi =
     options.useAi &&
     (options.summaryMode !== "preserve" || options.keywordAlignment !== "conservative");
-  if (wantsAi && !isAiConfigured()) {
+  const aiRoute = wantsAi ? await getAiRoute(actor.userId, "resume.tailor") : null;
+  if (wantsAi && aiRoute && !aiRoute.steps.length) {
     aiStatus = "UNAVAILABLE";
     stages.push({
       key: "draft",
       label: "Drafting targeted wording",
       status: "skipped",
       ms: 0,
-      detail: "Local AI is not configured — deterministic tailoring only.",
+      detail: `${routeUnavailableReason(aiRoute)} Deterministic tailoring only.`,
     });
   } else if (wantsAi) {
     const started = Date.now();
@@ -207,7 +207,7 @@ export async function tailorResumeToJob(actor: ActorRef, raw: TailorInput): Prom
       requirements: ctx.requirements,
       options,
     });
-    const result = await generateStructured({
+    const result = await runAiTask({
       userId: actor.userId,
       agent: "resume-tailor",
       task: "resume.tailor",
@@ -219,9 +219,7 @@ export async function tailorResumeToJob(actor: ActorRef, raw: TailorInput): Prom
       schema: aiTailorOutputSchema,
     });
     if (!result.ok) {
-      aiStatus = result.error.publicMessage.includes("unexpected format")
-        ? "INVALID_OUTPUT"
-        : "UNAVAILABLE";
+      aiStatus = result.errorKind === "INVALID_OUTPUT" ? "INVALID_OUTPUT" : "UNAVAILABLE";
       stages.push({
         key: "draft",
         label: "Drafting targeted wording",
@@ -232,7 +230,7 @@ export async function tailorResumeToJob(actor: ActorRef, raw: TailorInput): Prom
       changeSet.warnings.push(
         aiStatus === "INVALID_OUTPUT"
           ? "The AI response did not pass validation, so no AI wording was used."
-          : "The local AI was unavailable, so no AI wording was used.",
+          : `AI wording was skipped: ${result.error.publicMessage}`,
       );
     } else {
       stages.push({
@@ -387,5 +385,15 @@ export async function getTailoringPreview(
         parseResumeDocument(version.content),
       );
   }
-  return { ctx, alignment, aiConfigured: isAiConfigured() };
+  const route = await getAiRoute(actor.userId, "resume.tailor");
+  const first = route.steps[0];
+  return {
+    ctx,
+    alignment,
+    aiConfigured: Boolean(first),
+    aiProvider: first
+      ? `${first.kind === "ollama" ? "Ollama" : "Gemini"} · ${first.choice.model} (${first.kind === "ollama" ? "local — facts never leave your server" : "cloud — you opted in to private cloud processing"})`
+      : null,
+    aiUnavailableReason: routeUnavailableReason(route),
+  };
 }

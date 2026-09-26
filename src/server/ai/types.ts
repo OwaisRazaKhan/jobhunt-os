@@ -1,5 +1,11 @@
 import type { z } from "zod";
 
+/**
+ * AI provider contract (docs/ai-architecture.md). Business services never import a provider:
+ * they call the orchestrator (orchestrator.ts), which picks a provider per task and privacy
+ * policy, validates output and records metadata.
+ */
+
 export interface AiMessage {
   role: "system" | "user";
   content: string;
@@ -10,41 +16,90 @@ export interface TokenUsage {
   outputTokens?: number;
 }
 
-export interface StructuredRequest {
+/** Provider slot: "ollama" = local/private, "gemini" = cloud/optional. */
+export type ProviderKind = "ollama" | "gemini";
+
+interface BaseRequest {
   model: string;
   messages: AiMessage[];
-  /** JSON Schema the provider should constrain output to (derived from Zod). */
-  jsonSchema: Record<string, unknown>;
   temperature?: number;
+  /** Output token limit (cost/latency control) */
+  maxOutputTokens?: number;
+  /** Per-request timeout; providers fall back to their configured default */
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
+export interface StructuredRequest extends BaseRequest {
+  /** JSON Schema the provider should constrain output to (derived from Zod). */
+  jsonSchema: Record<string, unknown>;
+}
+
+export type TextRequest = BaseRequest;
+
 export interface StructuredResponse {
-  /** Raw parsed JSON — NOT trusted until validated by the AI service. */
+  /** Raw parsed JSON — NOT trusted until validated by the orchestrator. */
   json: unknown;
   usage: TokenUsage;
   model: string;
+}
+
+export interface TextResponse {
+  text: string;
+  usage: TokenUsage;
+  model: string;
+}
+
+export interface ProviderCapabilities {
+  structuredOutput: boolean;
+  longContext: boolean;
+  local: boolean;
 }
 
 export interface ProviderHealth {
   ok: boolean;
   model: string;
   modelAvailable: boolean;
+  /** Stable status code (see AiErrorKind) or "READY" */
+  status: "READY" | AiErrorKind;
   detail?: string;
+  /** Extra non-secret facts (Ollama version, installed models…) */
+  info?: Record<string, unknown>;
 }
 
 /**
- * Provider adapter contract. Adapters translate to a vendor API and map
- * failures to AppError("AI_ERROR"). Nothing outside src/server/ai imports an adapter.
+ * Provider adapter contract. Adapters translate to a vendor API and throw AiProviderError with
+ * a classified kind. Nothing outside src/server/ai imports an adapter.
  */
 export interface AiProvider {
   readonly id: string;
-  /** Runs on infrastructure we control. Personal data may only go to local providers in Phase 1. */
+  /** Runs on infrastructure we control (local). Cloud providers are never "local". */
   readonly local: boolean;
+  readonly capabilities?: ProviderCapabilities;
   generateStructured(request: StructuredRequest): Promise<StructuredResponse>;
+  generateText?(request: TextRequest): Promise<TextResponse>;
   health(model: string): Promise<ProviderHealth>;
 }
 
+/** Classified provider failure kinds (shown to users in plain language). */
+export const AI_ERROR_KINDS = [
+  "NOT_CONFIGURED",
+  "OFFLINE",
+  "MODEL_MISSING",
+  "MODEL_LOADING",
+  "INVALID_API_KEY",
+  "QUOTA_EXCEEDED",
+  "RATE_LIMITED",
+  "MODEL_UNAVAILABLE",
+  "NETWORK_ERROR",
+  "TIMEOUT",
+  "GENERATION_FAILED",
+  "INVALID_OUTPUT",
+  "POLICY_DENIED",
+] as const;
+export type AiErrorKind = (typeof AI_ERROR_KINDS)[number];
+
+/** Existing task identifiers (stored in ai_generations.task). See registry.ts. */
 export type AiTask =
   "candidate.extract_facts" | "matching.semantic_skills" | "research.synthesize" | "resume.tailor";
 

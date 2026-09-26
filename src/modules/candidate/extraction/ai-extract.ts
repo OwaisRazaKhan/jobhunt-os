@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { generateStructured } from "@/server/ai/service";
+import { runAiTask } from "@/server/ai/orchestrator";
 import type { AppError } from "@/server/errors";
 import { SECTION_SCHEMAS, type SectionKind } from "../schemas";
 import { categorizeSkill, portfolioTypeForUrl, type FactDraft } from "./parse-rules";
@@ -241,7 +241,7 @@ export async function extractFactsWithAi(input: {
   documentText: string;
   traceId?: string;
 }): Promise<AiExtractionResult> {
-  const result = await generateStructured({
+  const result = await runAiTask({
     userId: input.userId,
     agent: "CANDIDATE_EXTRACTION",
     task: "candidate.extract_facts",
@@ -257,9 +257,7 @@ export async function extractFactsWithAi(input: {
     ],
   });
   if (!result.ok) {
-    const status = result.error.message.includes("schema validation")
-      ? "SCHEMA_INVALID"
-      : "UNAVAILABLE";
+    const status = result.errorKind === "INVALID_OUTPUT" ? "SCHEMA_INVALID" : "UNAVAILABLE";
     return {
       status,
       drafts: [],

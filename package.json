@@ -27,6 +27,7 @@
     "scheduler": "tsx scripts/scheduler.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.24.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0",
     "@supabase/supabase-js": "^2.117.2",
@@ -66,5 +67,13 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "allowScripts": {
+    "@google/genai@2.24.0": true,
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.0": true,
+    "protobufjs@7.6.6": true,
+    "unrs-resolver@1.12.2": true
   }
 }

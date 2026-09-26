@@ -1,7 +1,7 @@
 import "server-only";
 import { getServerEnv } from "@/config/env";
 import { uuidv7 } from "@/lib/ids";
-import { isAiConfigured } from "@/server/ai/router";
+import { getAiRoute } from "@/server/ai/orchestrator";
 import { AI_UNAVAILABLE_MESSAGE } from "@/server/ai/providers/ollama";
 import { recordAudit } from "@/server/audit";
 import { sha256Hex } from "@/server/crypto";
@@ -255,7 +255,7 @@ export async function processDocument(
   const ruleDrafts = validateDrafts(parseCvText(text));
   const wantsAi = options.useAi !== false;
   const ai =
-    wantsAi && isAiConfigured()
+    wantsAi && (await getAiRoute(actor.userId, "candidate.extract_facts")).steps.length > 0
       ? await extractFactsWithAi({
           userId: actor.userId,
           documentText: text,

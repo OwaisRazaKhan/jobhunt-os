@@ -143,6 +143,7 @@ model User {
   resumeCheckFindings     ResumeCheckFinding[]
   resumeApprovals         ResumeApproval[]
   resumeExports           ResumeExport[]
+  aiPreferences           AiPreferences?
 
   @@map("users")
 }
@@ -677,6 +678,16 @@ model AiGeneration {
   outputTokens  Int?     @map("output_tokens")
   latencyMs     Int      @map("latency_ms")
   traceId       String?  @map("trace_id")
+  /// PUBLIC | INTERNAL | PRIVATE_CANDIDATE | HIGH_SENSITIVITY (from the AI task registry)
+  sensitivity   String?
+  /// Readable prompt identity, e.g. "resume.tailor@v1"
+  promptKey     String?  @map("prompt_key")
+  /// 1 = first try; >1 = bounded retry or permitted fallback attempt
+  attempt       Int      @default(1)
+  /// Why this provider was chosen (routing explanation, no content)
+  routeReason   String?  @map("route_reason")
+  /// SHA-256 of the validated output (reproducibility without re-reading content)
+  outputHash    String?  @map("output_hash") @db.Char(64)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -1951,4 +1962,30 @@ model ResumeExport {
   @@index([versionId, createdAt(sort: Desc)])
   @@index([userId])
   @@map("resume_exports")
+}
+
+// ---------------------------------------------------------------------------
+// AI orchestration (see docs/ai-architecture.md)
+//   ai_preferences: USER-OWNED routing/privacy choices. Private candidate data may reach
+//   the cloud provider only when allow_private_cloud = true AND the operator switch
+//   AI_ALLOW_PRIVATE_GEMINI is on. Default: local only.
+// ---------------------------------------------------------------------------
+
+model AiPreferences {
+  userId                  String    @id @map("user_id") @db.Uuid
+  /// auto | ollama | gemini — preference only; privacy policy always wins
+  primaryProvider         String    @default("auto") @map("primary_provider")
+  /// Allow Gemini for PUBLIC-only tasks (research synthesis over public sources)
+  geminiForPublic         Boolean   @default(true) @map("gemini_for_public")
+  /// Explicit opt-in: allow Gemini for PRIVATE candidate data (default OFF)
+  allowPrivateCloud       Boolean   @default(false) @map("allow_private_cloud")
+  privateCloudConsentedAt DateTime? @map("private_cloud_consented_at") @db.Timestamptz(3)
+  /// Try another PERMITTED provider when the first one is unavailable (default OFF)
+  autoFallback            Boolean   @default(false) @map("auto_fallback")
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_preferences")
 }

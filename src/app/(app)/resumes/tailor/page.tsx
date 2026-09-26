@@ -100,7 +100,13 @@ export default async function TailorPage({ searchParams }: PageProps<"/resumes/t
             description="Creates a new, job-linked resume. Your source resume is not changed."
           />
           <div className="px-4 py-3">
-            <TailorForm jobId={ctx.job.id} sources={sources} aiConfigured={aiConfigured} />
+            <TailorForm
+              jobId={ctx.job.id}
+              sources={sources}
+              aiConfigured={aiConfigured}
+              aiProvider={preview.aiProvider}
+              aiUnavailableReason={preview.aiUnavailableReason}
+            />
           </div>
         </Card>
         <Card>

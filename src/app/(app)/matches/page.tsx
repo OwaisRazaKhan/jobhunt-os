@@ -11,7 +11,7 @@ import { MAX_BATCH_JOBS, OVERALL_LABELS, OVERALL_STATUSES } from "@/modules/matc
 import { BatchProgress, MatchJobsButton } from "@/modules/matching/ui/batch-controls";
 import { MatchStatusBadge } from "@/modules/matching/ui/match-badge";
 import { MatchingSettingsForm } from "@/modules/matching/ui/matching-settings-form";
-import { isAiConfigured } from "@/server/ai/router";
+import { getAiRoute } from "@/server/ai/orchestrator";
 import { requireActorOrRedirect } from "@/server/session";
 
 export const metadata: Metadata = { title: "Matches · JOBHUNT OS" };
@@ -149,7 +149,12 @@ export default async function MatchesPage({ searchParams }: PageProps<"/matches"
               title="Matching settings"
               description="Separate from your candidate profile and your search profiles. Changing them marks matches stale."
             />
-            <MatchingSettingsForm initial={prefs} aiAvailable={isAiConfigured()} />
+            <MatchingSettingsForm
+              initial={prefs}
+              aiAvailable={
+                (await getAiRoute(actor.userId, "matching.semantic_skills")).steps.length > 0
+              }
+            />
           </Card>
         </div>
       </div>

@@ -49,6 +49,23 @@ export const serverEnvSchema = z.object({
   OLLAMA_BASE_URL: z.url().default("http://127.0.0.1:11434"),
   OLLAMA_MODEL: z.string().min(1).default("llama3.1:8b"),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  /** Provider for tasks without a stronger preference. Private candidate data always stays local by default. */
+  AI_DEFAULT_PROVIDER: z.enum(["ollama", "gemini"]).default("ollama"),
+  /** Preferred provider for PUBLIC-only tasks (e.g. research synthesis over public sources). */
+  AI_PUBLIC_PROVIDER: z.enum(["ollama", "gemini"]).default("gemini"),
+  /**
+   * Operator master switch. Private candidate data may reach Gemini only when this is "true"
+   * AND the user explicitly opts in on the AI settings page. Default: false (local only).
+   */
+  AI_ALLOW_PRIVATE_GEMINI: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+
+  // Google Gemini (optional cloud provider). The key is server-only — never NEXT_PUBLIC_.
+  GEMINI_API_KEY: optionalString,
+  GEMINI_MODEL: z.string().min(1).default("gemini-3.8-flash"),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
 
   // Scheduled discovery (Phase 2 CP14). Shared secret for the internal cron endpoint;
   // unset = the endpoint is disabled. Generate 32+ random bytes; never NEXT_PUBLIC_.

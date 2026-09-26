@@ -1,7 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { isAiConfigured } from "@/server/ai/router";
-import { generateStructured } from "@/server/ai/service";
+import { runAiTask } from "@/server/ai/orchestrator";
 import { logger } from "@/server/logger";
 import {
   isUsable,
@@ -70,8 +69,6 @@ export async function applySemanticAssist(input: {
     .slice(0, MAX_SKILLS);
   if (!gaps.length || !skills.length)
     return { results: input.results, status: "NOT_NEEDED", generationId: null };
-  if (!isAiConfigured())
-    return { results: input.results, status: "UNAVAILABLE", generationId: null };
 
   const payload = {
     requirements: gaps.map((g) => ({
@@ -80,7 +77,7 @@ export async function applySemanticAssist(input: {
     })),
     candidateSkills: skills.map((s) => ({ ref: `skill:${s.id}`, name: clean(s.name, 80) })),
   };
-  const result = await generateStructured({
+  const result = await runAiTask({
     userId: input.userId,
     agent: "MATCHING",
     task: "matching.semantic_skills",
@@ -95,7 +92,7 @@ export async function applySemanticAssist(input: {
     ],
   });
   if (!result.ok) {
-    const invalid = result.error.message.includes("schema validation");
+    const invalid = result.errorKind === "INVALID_OUTPUT";
     logger.warn("semantic assist unavailable", { category: "ai", invalid });
     return {
       results: input.results,

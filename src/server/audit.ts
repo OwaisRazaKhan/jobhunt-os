@@ -108,7 +108,11 @@ export type AuditAction =
   | "resume_archived"
   | "resume_unarchived"
   | "resume_exported"
-  | "resume_export_failed";
+  | "resume_export_failed"
+  | "ai_preferences_updated"
+  | "private_cloud_ai_enabled"
+  | "private_cloud_ai_disabled"
+  | "ai_provider_tested";
 
 export interface AuditEntry {
   userId: string;

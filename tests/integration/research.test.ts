@@ -496,7 +496,7 @@ describe("AI synthesis (optional, validated)", () => {
         };
       },
       async health(model) {
-        return { ok: true, model, modelAvailable: true };
+        return { ok: true, model, modelAvailable: true, status: "READY" as const };
       },
     };
   }

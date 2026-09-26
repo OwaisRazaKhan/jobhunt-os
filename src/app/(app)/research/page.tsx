@@ -7,7 +7,7 @@ import { listRecentResearch } from "@/modules/research/research.service";
 import { DEPTH_CONFIG, DEPTHS } from "@/modules/research/types";
 import { ResearchSettingsForm } from "@/modules/research/ui/research-controls";
 import { day, ResearchStatusBadge, STATUS_TONE } from "@/modules/research/ui/research-parts";
-import { isAiConfigured } from "@/server/ai/router";
+import { getAiRoute } from "@/server/ai/orchestrator";
 import { requireActorOrRedirect } from "@/server/session";
 
 export const metadata: Metadata = { title: "Research · JOBHUNT OS" };
@@ -144,7 +144,7 @@ export default async function ResearchPage() {
                 staleDays: policy.staleDays,
                 aiSynthesis: policy.aiSynthesis,
               }}
-              aiAvailable={isAiConfigured()}
+              aiAvailable={(await getAiRoute(actor.userId, "research.synthesize")).steps.length > 0}
             />
           </Card>
           <Card>

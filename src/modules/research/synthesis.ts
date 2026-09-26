@@ -1,6 +1,5 @@
 import "server-only";
-import { isAiConfigured } from "@/server/ai/router";
-import { generateStructured } from "@/server/ai/service";
+import { runAiTask } from "@/server/ai/orchestrator";
 import { aiSynthesisSchema, validateAiClaims, type EvidenceForAi } from "./claims";
 import type { DraftClaim } from "./types";
 
@@ -77,10 +76,9 @@ export async function synthesize(input: {
 }): Promise<SynthesisResult> {
   const none = { accepted: [], rejected: [], provider: null, model: null, generationId: null };
   if (!input.enabled) return { status: "OFF", ...none };
-  if (!isAiConfigured()) return { status: "UNAVAILABLE", ...none };
   const evidence = evidenceForAi(input.drafts);
   if (!evidence.length) return { status: "OFF", ...none };
-  const result = await generateStructured({
+  const result = await runAiTask({
     userId: input.userId,
     agent: "RESEARCH",
     task: "research.synthesize",
@@ -99,7 +97,7 @@ export async function synthesize(input: {
     ],
   });
   if (!result.ok) {
-    const invalid = result.error.message.includes("schema validation");
+    const invalid = result.errorKind === "INVALID_OUTPUT";
     return {
       status: invalid ? "REJECTED" : "UNAVAILABLE",
       ...none,

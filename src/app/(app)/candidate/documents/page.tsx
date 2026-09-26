@@ -9,7 +9,7 @@ import { optionLabel } from "@/modules/candidate/options";
 import { isSectionKind } from "@/modules/candidate/schemas";
 import { DocumentActions } from "@/modules/candidate/ui/document-actions";
 import { DocumentUploader } from "@/modules/candidate/ui/document-uploader";
-import { primaryProvider } from "@/server/ai/router";
+import { getAiRoute, providerStatuses } from "@/server/ai/orchestrator";
 import { requireActorOrRedirect } from "@/server/session";
 
 export const metadata: Metadata = { title: "Documents · JOBHUNT OS" };
@@ -22,11 +22,13 @@ const STATUS_TONE = {
   FAILED: "danger",
 } as const;
 
-async function aiAvailable() {
-  const choice = primaryProvider();
-  if (!choice) return false;
-  const health = await choice.provider.health(choice.model);
-  return health.ok && health.modelAvailable;
+/** AI assistance is offered when the routed provider for CV extraction is healthy. */
+async function aiAvailable(userId: string) {
+  const route = await getAiRoute(userId, "candidate.extract_facts");
+  const first = route.steps[0];
+  if (!first) return false;
+  const status = (await providerStatuses())[first.kind];
+  return Boolean(status?.health.ok);
 }
 
 function formatSize(bytes: number) {
@@ -37,7 +39,7 @@ function formatSize(bytes: number) {
 
 export default async function DocumentsPage() {
   const actor = await requireActorOrRedirect();
-  const [documents, ai] = await Promise.all([listDocuments(actor), aiAvailable()]);
+  const [documents, ai] = await Promise.all([listDocuments(actor), aiAvailable(actor.userId)]);
   const maxMb = Math.round(getServerEnv().MAX_UPLOAD_BYTES / 1024 / 1024);
 
   return (

@@ -165,10 +165,14 @@ export function TailorForm({
   jobId,
   sources,
   aiConfigured,
+  aiProvider,
+  aiUnavailableReason,
 }: {
   jobId: string;
   sources: { resumeId: string; versionId: string; label: string }[];
   aiConfigured: boolean;
+  aiProvider: string | null;
+  aiUnavailableReason: string | null;
 }) {
   const [state, action, pending] = useActionState(tailorResumeAction, INITIAL_ACTION_STATE);
   const data = state.data as
@@ -281,10 +285,10 @@ export function TailorForm({
             disabled={!aiConfigured}
             className="size-4 accent-[var(--accent)]"
           />
-          Use local AI for wording{" "}
-          {aiConfigured
-            ? "(Ollama, on this machine — facts never leave your server)"
-            : "(local AI is not configured — deterministic tailoring only)"}
+          Use AI for wording{" "}
+          {aiConfigured && aiProvider
+            ? `— ${aiProvider}`
+            : `— unavailable: ${aiUnavailableReason ?? "no AI provider"} Deterministic tailoring only.`}
         </label>
       </fieldset>
 

@@ -47,7 +47,7 @@ function fakeProvider(
       return { json, usage: { inputTokens: 10, outputTokens: 5 }, model: req.model };
     },
     async health(model) {
-      return { ok: true, model, modelAvailable: true };
+      return { ok: true, model, modelAvailable: true, status: "READY" as const };
     },
   };
 }

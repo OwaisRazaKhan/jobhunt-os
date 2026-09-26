@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { getServerEnv } from "@/config/env";
 import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, CardHeader, PageHeader } from "@/components/ui/primitives";
-import { primaryProvider } from "@/server/ai/router";
+import { providerStatuses } from "@/server/ai/orchestrator";
+import { getAiPreferences } from "@/server/ai/preferences";
 import { getStorage } from "@/server/storage";
 import { requireActorOrRedirect } from "@/server/session";
 import { DeleteAccount, DeleteCandidateData } from "./danger-zone";
@@ -23,8 +24,18 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default async function SettingsPage() {
   const actor = await requireActorOrRedirect();
   const env = getServerEnv();
-  const choice = primaryProvider();
-  const health = choice ? await choice.provider.health(choice.model) : null;
+  const [statuses, aiPrefs] = await Promise.all([
+    providerStatuses(),
+    getAiPreferences(actor.userId),
+  ]);
+  const status = (s: (typeof statuses)["ollama"]) =>
+    !s ? (
+      <Badge>Not configured</Badge>
+    ) : s.health.status === "READY" ? (
+      <Badge tone="success">Connected</Badge>
+    ) : (
+      <Badge tone="warning">{s.health.status}</Badge>
+    );
   let storageKind = "not configured";
   try {
     storageKind =
@@ -41,30 +52,25 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader
-          title="Local AI"
-          description="Used only to assist CV extraction. Everything works without it."
+          title="AI"
+          description="Optional assistance. Every feature works without it."
+          actions={
+            <a href="/settings/ai" className={buttonClass("secondary", "sm")}>
+              AI providers & privacy
+            </a>
+          }
         />
         <div className="divide-border divide-y">
-          <Row label="Provider">
-            {choice ? `Ollama · ${env.OLLAMA_BASE_URL}` : "Disabled (AI_ENABLED=false)"}
+          <Row label="Ollama (local)">
+            {status(statuses.ollama)} <span className="font-mono">{env.OLLAMA_MODEL}</span>
           </Row>
-          <Row label="Model">
-            {choice ? <span className="font-mono">{choice.model}</span> : "—"}
+          <Row label="Gemini (cloud)">
+            {status(statuses.gemini)} <span className="font-mono">{env.GEMINI_MODEL}</span>
           </Row>
-          <Row label="Status">
-            {!health ? (
-              <Badge>Disabled</Badge>
-            ) : health.ok && health.modelAvailable ? (
-              <Badge tone="success">Connected</Badge>
-            ) : health.ok ? (
-              <Badge tone="warning">Model not installed — run: ollama pull {choice?.model}</Badge>
-            ) : (
-              <Badge tone="warning">Offline — AI extraction is currently unavailable</Badge>
-            )}
-          </Row>
-          <Row label="Privacy">
-            Candidate documents are only sent to this local model — never to third-party AI
-            services.
+          <Row label="Private data">
+            {aiPrefs.allowPrivateCloud && env.AI_ALLOW_PRIVATE_GEMINI
+              ? "Cloud processing allowed (you opted in)."
+              : "Local only — your candidate data is never sent to cloud AI."}
           </Row>
         </div>
       </Card>
