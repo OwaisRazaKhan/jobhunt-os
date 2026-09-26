@@ -5,11 +5,11 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-26** — Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job (not approved, not exported, nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-26** — Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 7 — Communication Studio: built, awaiting your review/approval of the real drafts** (Phase 6 built and used on real data)                                               |
+| Current phase       | **Phase 7 — Communication Studio: built and used end to end on real data** (Phase 6 built and used on real data)                                                                |
 | Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
@@ -47,7 +47,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
   service role and short-lived signed URLs).
 - Real data present (preserve it): 3 users, 1,721 jobs (all PUBLIC catalog), 1,721 source postings,
   2,735 job requirements, 45 matches, 2 search profiles, 5 discovery runs, 39 sync runs, 1 candidate profile,
-  1 stored document, 106 audit records (counts from the earlier re-sync). Since then (owais): job research v1 for the Sarvam job (25 verified claims from the posting), 2 communications (application email v3, cover letter v2 — AI drafts, not approved).
+  1 stored document, 106 audit records (counts from the earlier re-sync). Since then (owais): job research v1 for the Sarvam job (25 verified claims from the posting), 2 communications (application email v3, cover letter v2 — approved and exported).
 
 ## Scheduling
 
@@ -95,7 +95,9 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 - The review fixed the system: greeting/closing lines inside the AI body, intent sentences counted as claims,
   job-posting names flagged as unknown, a check transaction that could exceed 20 s (claims now batch-inserted,
   reads and writes split).
-- Not approved, not exported, nothing sent — approval is the candidate's decision.
+- Approved by the candidate (confirmed in chat) and exported: cover letter v2 → PDF (3,103 B) + DOCX
+  (9,798 B), email v3 → TXT (961 B); all files verified by download (`matches_approval` true, user-scoped
+  storage paths). Nothing was sent.
 
 ## Known issues
 
