@@ -45,7 +45,7 @@ const GROUPS: { type: RequirementType; title: string; tone: Tone; help: string }
   },
 ];
 
-const CATEGORY_LABELS: Record<RequirementKind, string> = {
+export const CATEGORY_LABELS: Record<RequirementKind, string> = {
   SKILL: "Skill",
   EXPERIENCE: "Experience",
   EDUCATION: "Education",

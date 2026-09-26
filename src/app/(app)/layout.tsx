@@ -3,6 +3,7 @@ import {
   Briefcase,
   FileSearch,
   FileText,
+  Gauge,
   ListChecks,
   Play,
   Plug,
@@ -74,6 +75,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </NavLink>
           <NavLink href="/jobs/sources">
             <Plug className="size-4" aria-hidden /> Sources
+          </NavLink>
+          <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
+            Matching
+          </p>
+          <NavLink href="/matches">
+            <Gauge className="size-4" aria-hidden /> Matches
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System

@@ -8,7 +8,8 @@ import { REQUIREMENT_KINDS, REQUIREMENT_TYPES } from "./requirements/extract";
  * explainable dimensions. They are never predictions of hiring success.
  */
 
-export const MATCHING_VERSION = "v1";
+/** Bump when engine rules change: existing matches then show "Requires recalculation". */
+export const MATCHING_VERSION = "engine-2.0";
 
 export const DIMENSIONS = [
   "SKILLS",
@@ -41,8 +42,9 @@ export const OVERALL_STATUSES = [
   "STRONG_MATCH",
   "GOOD_MATCH",
   "PARTIAL_MATCH",
-  "REVIEW",
+  "LOW_MATCH",
   "BLOCKED",
+  "INSUFFICIENT_DATA",
 ] as const;
 export type OverallStatus = (typeof OVERALL_STATUSES)[number];
 
@@ -74,106 +76,47 @@ export const requirementInput = z.object({
 });
 export type RequirementInput = z.input<typeof requirementInput>;
 
-// --- Match results --------------------------------------------------------------
+// --- Match results (engine output, persisted) -------------------------------------
 
-export const EVIDENCE_OUTCOMES = ["SUPPORTS", "PARTIAL", "MISSING", "UNKNOWN", "CONFLICT"] as const;
+export type { OverallStatusV2, ResultStatus, GapKind, MatchCounts } from "./engine/types";
 
-export const evidenceItemInput = z
-  .object({
-    requirementId: z.uuid().optional(),
-    factRef: factRefSchema.optional(),
-    outcome: z.enum(EVIDENCE_OUTCOMES),
-    reasoning: z.string().trim().min(1).max(500),
-  })
-  .refine(
-    (e) => (e.outcome !== "SUPPORTS" && e.outcome !== "PARTIAL" ? true : Boolean(e.factRef)),
-    {
-      message: "Supporting evidence must cite a candidate fact",
-      path: ["factRef"],
-    },
-  );
-
-export const dimensionResultInput = z.object({
-  dimension: z.enum(DIMENSIONS),
-  status: z.enum(DIMENSION_STATUSES),
-  isHard: z.boolean().default(false),
-  summary: z.string().trim().min(1).max(1000),
-  evidence: z.array(evidenceItemInput).max(100).default([]),
-});
-
-export const statementInput = z.object({
-  text: z.string().trim().min(1).max(300),
-  dimension: z.enum(DIMENSIONS),
-  requirementIds: z.array(z.uuid()).max(20).default([]),
-  factRefs: z.array(factRefSchema).max(20).default([]),
-});
-
-export const explanationInput = z.object({
-  // "Why it fits" statements must be backed by candidate facts (evidence-first).
-  fits: z
-    .array(
-      statementInput.refine((s) => s.factRefs.length > 0, {
-        message: "A fit statement must cite candidate evidence",
-      }),
-    )
-    .max(30)
-    .default([]),
-  gaps: z.array(statementInput).max(30).default([]),
-  unknowns: z.array(statementInput).max(30).default([]),
-});
-
-export const matchResultInput = z
-  .object({
-    overallStatus: z.enum(OVERALL_STATUSES),
-    summaryScore: z.number().int().min(0).max(100).nullable(),
-    hardBlock: z.boolean(),
-    hardBlockReason: z.string().trim().min(1).max(500).nullable(),
-    dimensions: z.array(dimensionResultInput).min(1).max(DIMENSIONS.length),
-    explanation: explanationInput,
-  })
-  .superRefine((m, ctx) => {
-    if (m.hardBlock !== (m.overallStatus === "BLOCKED")) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["overallStatus"],
-        message: "BLOCKED is used exactly when there is a hard block",
-      });
-    }
-    if (m.hardBlock && !m.hardBlockReason) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["hardBlockReason"],
-        message: "A hard block must state its reason",
-      });
-    }
-    if (m.hardBlock && !m.dimensions.some((d) => d.status === "BLOCKED" && d.isHard)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["dimensions"],
-        message: "A hard block must come from a BLOCKED hard-requirement dimension",
-      });
-    }
-    const seen = new Set<string>();
-    for (const d of m.dimensions) {
-      if (seen.has(d.dimension))
-        ctx.addIssue({
-          code: "custom",
-          path: ["dimensions"],
-          message: `Duplicate dimension ${d.dimension}`,
-        });
-      seen.add(d.dimension);
-    }
-  });
-export type MatchResultInput = z.input<typeof matchResultInput>;
-
-// --- Display labels ----------------------------------------------------------------
-
-export const OVERALL_LABELS: Record<OverallStatus, string> = {
+export const OVERALL_LABELS: Record<string, string> = {
   STRONG_MATCH: "Strong match",
   GOOD_MATCH: "Good match",
   PARTIAL_MATCH: "Partial match",
-  REVIEW: "Review",
+  LOW_MATCH: "Low match",
   BLOCKED: "Blocked",
+  INSUFFICIENT_DATA: "Insufficient data",
+  REVIEW: "Review",
+};
+
+export const OVERALL_DESCRIPTIONS: Record<string, string> = {
+  STRONG_MATCH:
+    "Nearly all stated requirements are supported by your recorded facts, with no required gaps.",
+  GOOD_MATCH: "Most stated requirements are supported; at most one required gap.",
+  PARTIAL_MATCH: "Some stated requirements are supported; several gaps or partial matches.",
+  LOW_MATCH: "Few stated requirements are supported by your recorded facts.",
+  BLOCKED:
+    "A stated requirement is explicitly incompatible with your recorded facts or mandatory preferences.",
+  INSUFFICIENT_DATA: "Too little structured information to compare reliably.",
+};
+
+export const RESULT_LABELS: Record<string, string> = {
+  MATCHED: "Matched",
+  RELATED: "Related",
+  PARTIAL: "Partial",
+  GAP: "Gap",
+  UNKNOWN: "Unknown",
+  UNVERIFIED: "Needs review",
+  CONFLICT: "Conflict",
+  BLOCKED: "Hard block",
+  NOT_APPLICABLE: "Not assessed",
+};
+
+export const GAP_KIND_LABELS: Record<string, string> = {
+  REQUIRED: "Required gap",
+  PREFERRED: "Preferred gap",
+  PREFERENCE: "Preference conflict",
 };
 
 export const DIMENSION_LABELS: Record<Dimension, string> = {
@@ -188,7 +131,7 @@ export const DIMENSION_LABELS: Record<Dimension, string> = {
   SALARY: "Salary",
   WORK_AUTHORIZATION: "Work authorization",
   LANGUAGE: "Language",
-  CAREER_PREFERENCES: "Career preferences",
+  CAREER_PREFERENCES: "Other",
 };
 
 export const DIMENSION_STATUS_LABELS: Record<DimensionStatus, string> = {
@@ -200,3 +143,47 @@ export const DIMENSION_STATUS_LABELS: Record<DimensionStatus, string> = {
   BLOCKED: "Blocked",
   NOT_APPLICABLE: "Not applicable",
 };
+
+export const SEMANTIC_ASSIST_LABELS: Record<string, string> = {
+  NOT_USED: "Not used (off in matching settings)",
+  NOT_NEEDED: "Not needed (no skill gaps to review)",
+  UNAVAILABLE: "Unavailable (local AI not reachable) — deterministic result only",
+  APPLIED: "Applied (reviewed skill gaps; only validated related-skill links kept)",
+  REJECTED: "Rejected (AI output failed validation; deterministic result only)",
+};
+
+// --- Matching preferences -----------------------------------------------------------
+
+export const matchingPreferencesInput = z.object({
+  workModeHard: z.boolean(),
+  employmentTypeHard: z.boolean(),
+  locationHard: z.boolean(),
+  salaryMinHard: z.boolean(),
+  semanticAssist: z.boolean(),
+});
+export type MatchingPreferencesInput = z.infer<typeof matchingPreferencesInput>;
+
+// --- Batches -----------------------------------------------------------------------
+
+export const MAX_BATCH_JOBS = 200;
+export const BATCH_CHUNK = 10;
+export const batchInput = z.object({
+  jobIds: z.array(z.uuid()).min(1).max(MAX_BATCH_JOBS),
+});
+
+// --- Future workflow node contract (Phase 9 canvas will call this) ------------------
+
+export const matchingNodeInput = z.object({
+  candidateId: z.uuid(),
+  jobIds: z.array(z.uuid()).max(MAX_BATCH_JOBS).optional(),
+  /** Minimum overall status to count as "matched" (default GOOD_MATCH). */
+  threshold: z.enum(["STRONG_MATCH", "GOOD_MATCH", "PARTIAL_MATCH"]).optional(),
+  options: z.object({ recalculate: z.boolean().optional() }).optional(),
+});
+export type MatchingNodeInput = z.infer<typeof matchingNodeInput>;
+export interface MatchingNodeOutput {
+  matchedJobs: { jobId: string; matchId: string; overallStatus: string }[];
+  partialJobs: { jobId: string; matchId: string; overallStatus: string }[];
+  blockedJobs: { jobId: string; matchId: string; reason: string }[];
+  unknownJobs: { jobId: string; reason: string }[];
+}

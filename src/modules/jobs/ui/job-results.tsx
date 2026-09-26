@@ -12,6 +12,26 @@ import type { JobView } from "../search/params";
 import type { JobSearchItem } from "../search/search.service";
 import { JobStatusBadge, RemoteBadge } from "./job-badges";
 import { JobStateButton } from "./job-state-button";
+import { MatchStatusBadge } from "@/modules/matching/ui/match-badge";
+import type { Freshness } from "@/modules/matching/types";
+
+export type MatchIndicators = Map<string, { status: string; freshness: Freshness }>;
+
+/** Stored match result for this job (never computed here); nothing when not matched yet. */
+function MatchIndicator({
+  match,
+  jobId,
+}: {
+  match?: { status: string; freshness: Freshness };
+  jobId: string;
+}) {
+  if (!match) return null;
+  return (
+    <Link href={`/jobs/${jobId}/match`} className="mt-1 inline-block" title="Open match details">
+      <MatchStatusBadge status={match.status} freshness={match.freshness} />
+    </Link>
+  );
+}
 
 const dash = (
   <span className="text-fg-subtle" title="Not provided by the source">
@@ -84,7 +104,15 @@ function Actions({ job, view }: { job: JobSearchItem; view: JobView }) {
 }
 
 /** Results: dense table on desktop, cards on small screens. Unknown values show "—". */
-export function JobResults({ jobs, view }: { jobs: JobSearchItem[]; view: JobView }) {
+export function JobResults({
+  jobs,
+  view,
+  matches = new Map(),
+}: {
+  jobs: JobSearchItem[];
+  view: JobView;
+  matches?: MatchIndicators;
+}) {
   return (
     <>
       <div className="hidden overflow-x-auto xl:block">
@@ -136,6 +164,7 @@ export function JobResults({ jobs, view }: { jobs: JobSearchItem[]; view: JobVie
                       {job.categories.map((c) => c.name).join(" · ")}
                     </span>
                   )}
+                  <MatchIndicator match={matches.get(job.id)} jobId={job.id} />
                 </td>
                 <td className="text-fg-muted max-w-40 px-2 py-2.5 break-words">
                   {place(job) ?? dash}
@@ -188,6 +217,7 @@ export function JobResults({ jobs, view }: { jobs: JobSearchItem[]; view: JobVie
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                <MatchIndicator match={matches.get(job.id)} jobId={job.id} />
               </div>
               <Actions job={job} view={view} />
             </div>

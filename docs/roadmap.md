@@ -66,6 +66,11 @@ Each phase ends with a review and **explicit approval** before the next begins. 
 
 ## Phase 4 — Matching Engine
 
+> **Status: complete (CP1–CP7).** Implementation details and rules: [matching.md](matching.md).
+> Deviations from the original plan: no embeddings/pgvector (deterministic lexicon + optional local
+> AI RELATED suggestions instead), no numeric ranking (documented status categories only), matching
+> weights replaced by explicit "mandatory preference" switches.
+
 - **Objective:** explainable job-to-candidate matching including eligibility signals.
 - **Dependencies:** Phases 1, 3.
 - **Inputs:** candidate facts, canonical jobs, eligibility rules (seeded for initial countries, sourced and dated).

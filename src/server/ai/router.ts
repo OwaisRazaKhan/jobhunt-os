@@ -15,6 +15,7 @@ interface TaskPolicy {
 
 const TASK_POLICIES: Record<AiTask, TaskPolicy> = {
   "candidate.extract_facts": { personalData: true },
+  "matching.semantic_skills": { personalData: true },
 };
 
 let providerOverride: AiProvider[] | undefined;

@@ -19,6 +19,8 @@ import {
 import {
   EMPTY_SEARCH,
   FRESHNESS_DAYS,
+  MATCH_FILTER_LABELS,
+  MATCH_FILTERS,
   MAX_QUERY_LENGTH,
   searchHref,
   type JobSearchParams,
@@ -337,6 +339,17 @@ export function JobSearchForm({
               </Select>
             ))}
           </div>
+        </Section>
+
+        <Section title="Match">
+          <ChipGroup
+            name="match"
+            legend="Your match status"
+            options={MATCH_FILTERS.map((m) => ({ value: m, label: MATCH_FILTER_LABELS[m] ?? m }))}
+            selected={v.match}
+            onChange={(next) => set("match", next)}
+            help="Only jobs you matched explicitly have a status. Nothing is matched automatically."
+          />
         </Section>
 
         {options.profiles.length > 0 && (

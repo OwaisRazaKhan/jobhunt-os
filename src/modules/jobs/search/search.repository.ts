@@ -120,6 +120,18 @@ export function buildConditions(
     );
   if (p.disc) c.push(sql`j."discovered_at" >= ${new Date(ctx.now.getTime() - p.disc * DAY)}`);
   if (p.seen) c.push(sql`j."last_seen_at" >= ${new Date(ctx.now.getTime() - p.seen * DAY)}`);
+  if (p.match.length) {
+    const statuses = p.match.filter((m) => m !== "NONE");
+    const parts: Prisma.Sql[] = [];
+    if (statuses.length)
+      parts.push(sql`EXISTS (SELECT 1 FROM "job_matches" m
+        WHERE m."job_id" = j."id" AND m."user_id" = ${ctx.userId}::uuid AND m."is_current"
+        AND m."overall_status" = ANY(${statuses}::text[]))`);
+    if (p.match.includes("NONE"))
+      parts.push(sql`NOT EXISTS (SELECT 1 FROM "job_matches" m
+        WHERE m."job_id" = j."id" AND m."user_id" = ${ctx.userId}::uuid AND m."is_current")`);
+    c.push(sql`(${join(parts, " OR ")})`);
+  }
   if (p.profile)
     c.push(sql`EXISTS (SELECT 1 FROM "job_search_profile_hits" h
       WHERE h."job_id" = j."id" AND h."profile_id" = ${p.profile}::uuid

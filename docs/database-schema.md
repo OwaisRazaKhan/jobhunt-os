@@ -38,6 +38,24 @@ Details: [job-search.md](./job-search.md).
 Migration `20260930000000_phase4_requirement_sets`: versioned `job_requirement_sets`; `job_requirements`
 gains `set_id`, `position` and a separate `requirement_type`. Details: [matching.md](./matching.md).
 
+## 0e. Phase 4 matching engine (CP2–CP7)
+
+Migration `20261001000000_phase4_matching_engine`:
+
+- `job_matches`: the old `(user_id, job_id)` unique is replaced by history — `is_current` with partial
+  unique `(user_id, job_id) WHERE is_current`; new `requirement_set_id`, `counts jsonb`, `summary`,
+  `semantic_assist` (NOT_USED/NOT_NEEDED/UNAVAILABLE/APPLIED/REJECTED), `ai_generation_id`, `duration_ms`.
+  `overall_status` adds LOW_MATCH and INSUFFICIENT_DATA. `summary_score` stays NULL (no numeric score).
+- `job_match_requirement_results`: one row per requirement per match version (status, relationship,
+  gap kind, hard block, evidence jsonb, explanation, method RULE/AI_ASSISTED — AI only for RELATED).
+- `match_batches`: explicit batch runs (1–200 job ids, progress counters, cancel flag, heartbeat; one
+  QUEUED/RUNNING per user).
+- `matching_preferences`: per-user switches (work mode / employment / location / salary mandatory,
+  semantic assist). Separate from candidate preferences and search profiles.
+
+All new tables are owner-only under RLS (`user_id = app_current_user_id()`); the results policy also
+requires the parent match to belong to the same user. Details: [matching.md](./matching.md).
+
 ## 1. Conventions
 
 | Topic            | Rule                                                                                                                                                                                              |

@@ -28,6 +28,26 @@ export const FRESHNESS_DAYS = [1, 3, 7, 14, 30, 90] as const;
 export const JOB_VIEWS = ["all", "bookmarked", "hidden"] as const;
 export type JobView = (typeof JOB_VIEWS)[number];
 
+/** Match filter values: current match status of the job for this user, or NONE (not matched yet). */
+export const MATCH_FILTERS = [
+  "STRONG_MATCH",
+  "GOOD_MATCH",
+  "PARTIAL_MATCH",
+  "LOW_MATCH",
+  "BLOCKED",
+  "INSUFFICIENT_DATA",
+  "NONE",
+] as const;
+export const MATCH_FILTER_LABELS: Record<string, string> = {
+  STRONG_MATCH: "Strong match",
+  GOOD_MATCH: "Good match",
+  PARTIAL_MATCH: "Partial match",
+  LOW_MATCH: "Low match",
+  BLOCKED: "Blocked",
+  INSUFFICIENT_DATA: "Insufficient data",
+  NONE: "Not matched yet",
+};
+
 export const PAGE_SIZE = 25;
 export const MAX_PAGE = 400;
 export const MAX_QUERY_LENGTH = 200;
@@ -57,6 +77,8 @@ export interface JobSearchParams {
   disc: number | null;
   seen: number | null;
   profile: string | null;
+  /** Current match status filter (only jobs you matched explicitly have one) */
+  match: string[];
   sort: SortKey;
   page: number;
 }
@@ -80,6 +102,7 @@ export const EMPTY_SEARCH: JobSearchParams = {
   disc: null,
   seen: null,
   profile: null,
+  match: [],
   sort: "newest",
   page: 1,
 };
@@ -95,6 +118,7 @@ const LIST_LIMITS: Record<string, number> = {
   exp: 8,
   src: 10,
   status: 4,
+  match: 7,
 };
 
 function values(raw: RawParams, key: string): string[] {
@@ -170,6 +194,7 @@ export function parseSearchParams(raw: RawParams): ParsedSearch {
     disc: days("disc"),
     seen: days("seen"),
     profile: null,
+    match: list("match", inEnum(MATCH_FILTERS), true),
     sort: "newest",
     page: 1,
   };
@@ -220,7 +245,17 @@ export function toSearchParams(
   const v = { ...p, ...overrides };
   const out = new URLSearchParams();
   if (v.q) out.set("q", v.q);
-  for (const key of ["country", "loc", "cat", "mode", "type", "exp", "src", "status"] as const)
+  for (const key of [
+    "country",
+    "loc",
+    "cat",
+    "mode",
+    "type",
+    "exp",
+    "src",
+    "status",
+    "match",
+  ] as const)
     for (const item of v[key]) out.append(key, item);
   if (v.salMin !== null) out.set("salMin", String(v.salMin));
   if (v.salMax !== null) out.set("salMax", String(v.salMax));

@@ -16,6 +16,9 @@ import { countJobStates } from "@/modules/jobs/search/job-state.service";
 import { listSavedSearches, runSavedSearch } from "@/modules/jobs/search/saved-searches.service";
 import { loadSearchOptions, searchJobs, SOURCE_LABELS } from "@/modules/jobs/search/search.service";
 import { JobResults } from "@/modules/jobs/ui/job-results";
+import { getMatchIndicators } from "@/modules/matching/match.service";
+import { MATCH_FILTER_LABELS } from "@/modules/jobs/search/params";
+import { MatchJobsButton } from "@/modules/matching/ui/batch-controls";
 import { JobSearchForm } from "@/modules/jobs/ui/job-search-form";
 import { ResultsToolbar } from "@/modules/jobs/ui/results-toolbar";
 import {
@@ -27,6 +30,7 @@ import {
   type WorkMode,
 } from "@/modules/search-profiles/types";
 import { AppError } from "@/server/errors";
+import { logger } from "@/server/logger";
 import type { Actor } from "@/server/session";
 
 type RawParams = Record<string, string | string[] | undefined>;
@@ -167,6 +171,16 @@ export async function JobsWorkspace({
     countJobStates(actor),
     listSavedSearches(actor),
   ]);
+  // Stored match results only; jobs are never matched automatically by listing them.
+  const matches = await getMatchIndicators(
+    actor,
+    result.items.map((j) => j.id),
+  ).catch((error: unknown) => {
+    logger.warn("match indicators unavailable", {
+      error: error instanceof Error ? { name: error.name } : undefined,
+    });
+    return new Map();
+  });
   const activeSaved = view === "all" ? (saved.find((s) => s.id === savedParam) ?? null) : null;
   const withSaved = (href: string) =>
     activeSaved ? `${href}${href.includes("?") ? "&" : "?"}saved=${activeSaved.id}` : href;
@@ -228,6 +242,11 @@ export async function JobsWorkspace({
   if (params.disc)
     chips.push({ label: `Discovered ≤ ${params.disc}d`, href: href({ disc: null }) });
   if (params.seen) chips.push({ label: `Seen ≤ ${params.seen}d`, href: href({ seen: null }) });
+  for (const m of params.match)
+    chips.push({
+      label: `Match: ${MATCH_FILTER_LABELS[m] ?? m}`,
+      href: href({ match: params.match.filter((x) => x !== m) }),
+    });
   if (params.profile)
     chips.push({
       label: `Profile: ${name(options.profiles, params.profile)}`,
@@ -290,12 +309,24 @@ export async function JobsWorkspace({
                 {result.total > 0 && ` · showing ${from}–${to}`}
               </span>
             </p>
-            <ResultsToolbar
-              basePath={basePath}
-              params={params}
-              savedId={activeSaved?.id ?? null}
-              canSave={filtered}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              {result.items.length > 0 && (
+                <MatchJobsButton
+                  jobIds={result.items.map((j) => j.id)}
+                  label={
+                    result.items.length === 1
+                      ? "Match this job"
+                      : `Match these ${result.items.length} jobs`
+                  }
+                />
+              )}
+              <ResultsToolbar
+                basePath={basePath}
+                params={params}
+                savedId={activeSaved?.id ?? null}
+                canSave={filtered}
+              />
+            </div>
           </div>
           {chips.length > 0 && (
             <ul className="flex flex-wrap items-center gap-1.5" aria-label="Active filters">
@@ -350,7 +381,7 @@ export async function JobsWorkspace({
                 }
               />
             ) : (
-              <JobResults jobs={result.items} view={view} />
+              <JobResults jobs={result.items} view={view} matches={matches} />
             )}
           </Card>
 

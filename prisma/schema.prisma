@@ -91,38 +91,41 @@ model User {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sessions            Session[]
-  accounts            Account[]
-  candidateProfile    CandidateProfile?
-  education           CandidateEducation[]
-  experiences         CandidateExperience[]
-  achievements        CandidateAchievement[]
-  skills              CandidateSkill[]
-  projects            CandidateProject[]
-  certifications      CandidateCertification[]
-  portfolioItems      CandidatePortfolioItem[]
-  languages           CandidateLanguage[]
-  workAuthorizations  CandidateWorkAuthorization[]
-  preferences         CandidatePreferences?
-  targetLocations     CandidateTargetLocation[]
-  documents           CandidateDocument[]
-  factCandidates      CandidateFactCandidate[]
-  aiGenerations       AiGeneration[]
-  auditLogs           AuditLog[]
-  jobSources          JobSource[]
-  createdJobs         Job[]
-  jobMatches          JobMatch[]
-  marketLocations     MarketLocation[]
-  jobCategories       JobCategory[]
-  jobCategoryTerms    JobCategoryTerm[]
-  searchProfiles      SearchProfile[]
-  searchProfileHits   JobSearchProfileHit[]
-  categoryAssignments JobCategoryAssignment[]
-  discoveryRuns       DiscoveryRun[]
-  sourceSyncRuns      SourceSyncRun[]
-  jobMatchDimensions  JobMatchDimension[]
-  jobStates           UserJobState[]
-  savedSearches       SavedSearch[]
+  sessions                Session[]
+  accounts                Account[]
+  candidateProfile        CandidateProfile?
+  education               CandidateEducation[]
+  experiences             CandidateExperience[]
+  achievements            CandidateAchievement[]
+  skills                  CandidateSkill[]
+  projects                CandidateProject[]
+  certifications          CandidateCertification[]
+  portfolioItems          CandidatePortfolioItem[]
+  languages               CandidateLanguage[]
+  workAuthorizations      CandidateWorkAuthorization[]
+  preferences             CandidatePreferences?
+  targetLocations         CandidateTargetLocation[]
+  documents               CandidateDocument[]
+  factCandidates          CandidateFactCandidate[]
+  aiGenerations           AiGeneration[]
+  auditLogs               AuditLog[]
+  jobSources              JobSource[]
+  createdJobs             Job[]
+  jobMatches              JobMatch[]
+  marketLocations         MarketLocation[]
+  jobCategories           JobCategory[]
+  jobCategoryTerms        JobCategoryTerm[]
+  searchProfiles          SearchProfile[]
+  searchProfileHits       JobSearchProfileHit[]
+  categoryAssignments     JobCategoryAssignment[]
+  discoveryRuns           DiscoveryRun[]
+  sourceSyncRuns          SourceSyncRun[]
+  jobMatchDimensions      JobMatchDimension[]
+  jobStates               UserJobState[]
+  savedSearches           SavedSearch[]
+  matchRequirementResults JobMatchRequirementResult[]
+  matchBatches            MatchBatch[]
+  matchingPreferences     MatchingPreferences?
 
   @@map("users")
 }
@@ -661,6 +664,7 @@ model AiGeneration {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobMatches     JobMatch[]
   factCandidates CandidateFactCandidate[]
 
   @@index([userId, createdAt(sort: Desc)])
@@ -1201,8 +1205,9 @@ model JobRequirement {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  job Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  set JobRequirementSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  job          Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  set          JobRequirementSet           @relation(fields: [setId], references: [id], onDelete: Cascade)
+  matchResults JobMatchRequirementResult[]
 
   @@index([jobId, category])
   @@index([setId, position])
@@ -1224,6 +1229,7 @@ model JobRequirementSet {
 
   job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
   requirements JobRequirement[]
+  matches      JobMatch[]
 
   @@unique([jobId, version])
   @@map("job_requirement_sets")
@@ -1248,15 +1254,30 @@ model JobMatch {
   candidateSnapshotHash String   @map("candidate_snapshot_hash") @db.Char(64)
   jobContentHash        String   @map("job_content_hash") @db.Char(64)
   computedAt            DateTime @map("computed_at") @db.Timestamptz(3)
+  /// Exactly one current result per user + job; older versions are kept as history
+  isCurrent             Boolean  @default(true) @map("is_current")
+  /// The exact requirement set version this result was computed against
+  requirementSetId      String?  @map("requirement_set_id") @db.Uuid
+  /// Requirement result counts by status / gap kind (computed from the rows, for lists)
+  counts                Json     @default("{}")
+  /// Grounded natural-language summary built from the results
+  summary               String?
+  /// NOT_USED | NOT_NEEDED | UNAVAILABLE | APPLIED | REJECTED
+  semanticAssist        String   @default("NOT_USED") @map("semantic_assist")
+  aiGenerationId        String?  @map("ai_generation_id") @db.Uuid
+  durationMs            Int?     @map("duration_ms")
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job        Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  candidate  CandidateProfile    @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  dimensions JobMatchDimension[]
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job                Job                         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate          CandidateProfile            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  dimensions         JobMatchDimension[]
+  requirementSet     JobRequirementSet?          @relation(fields: [requirementSetId], references: [id], onDelete: SetNull)
+  aiGeneration       AiGeneration?               @relation(fields: [aiGenerationId], references: [id], onDelete: SetNull)
+  requirementResults JobMatchRequirementResult[]
 
-  @@unique([userId, jobId])
+  @@index([userId, jobId, computedAt(sort: Desc)])
   @@index([userId, overallStatus])
   @@index([jobId])
   @@index([candidateId])
@@ -1320,4 +1341,81 @@ model SavedSearch {
 
   @@unique([userId, name])
   @@map("saved_searches")
+}
+
+/// Phase 4: one requirement's result within one match version, with its evidence.
+model JobMatchRequirementResult {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  matchId       String   @map("match_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  requirementId String   @map("requirement_id") @db.Uuid
+  position      Int      @default(0)
+  /// MATCHED | RELATED | PARTIAL | GAP | UNKNOWN | UNVERIFIED | CONFLICT | BLOCKED | NOT_APPLICABLE
+  status        String
+  /// EXACT | RELATED | NONE (skills)
+  relationship  String?
+  /// REQUIRED | PREFERRED | PREFERENCE (only for gaps)
+  gapKind       String?  @map("gap_kind")
+  isHardBlock   Boolean  @default(false) @map("is_hard_block")
+  /// [{ ref, kind, label, excerpt, verification }] — candidate facts cited (labels from the DB)
+  evidence      Json     @default("[]")
+  explanation   String
+  /// RULE | AI_ASSISTED
+  method        String   @default("RULE")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  match       JobMatch       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requirement JobRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, requirementId])
+  @@index([userId])
+  @@index([requirementId])
+  @@map("job_match_requirement_results")
+}
+
+/// Phase 4: one user-requested batch of matches (bounded, cancellable, real progress).
+model MatchBatch {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  /// QUEUED | RUNNING | COMPLETED | CANCELLED | FAILED
+  status          String    @default("QUEUED")
+  jobIds          String[]  @map("job_ids") @db.Uuid
+  total           Int
+  done            Int       @default(0)
+  failed          Int       @default(0)
+  skipped         Int       @default(0)
+  /// Overall status counts of the produced matches
+  counts          Json      @default("{}")
+  cancelRequested Boolean   @default(false) @map("cancel_requested")
+  message         String?
+  startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt      DateTime? @map("finished_at") @db.Timestamptz(3)
+  heartbeatAt     DateTime? @map("heartbeat_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("match_batches")
+}
+
+/// Phase 4: how the user wants matching to treat their preferences (separate from facts).
+model MatchingPreferences {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  userId             String   @unique @map("user_id") @db.Uuid
+  /// Treat a job's work mode outside the preferred modes as a hard block
+  workModeHard       Boolean  @default(false) @map("work_mode_hard")
+  employmentTypeHard Boolean  @default(false) @map("employment_type_hard")
+  locationHard       Boolean  @default(false) @map("location_hard")
+  salaryMinHard      Boolean  @default(false) @map("salary_min_hard")
+  /// Allow the optional local Ollama step for unmatched skills
+  semanticAssist     Boolean  @default(false) @map("semantic_assist")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("matching_preferences")
 }

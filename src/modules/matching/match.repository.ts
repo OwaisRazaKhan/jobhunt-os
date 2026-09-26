@@ -51,32 +51,124 @@ export async function createRequirementSet(
   return findCurrentRequirementSet(tx, jobId);
 }
 
-export function findMatch(tx: Tx, userId: string, jobId: string) {
-  return tx.jobMatch.findUnique({
-    where: { userId_jobId: { userId, jobId } },
-    include: { dimensions: true },
+const matchInclude = {
+  dimensions: true,
+  requirementSet: { select: { id: true, version: true, extractorVersion: true, isCurrent: true } },
+} as const;
+
+/** The current (latest) match of a job for this user. */
+export function findCurrentMatch(tx: Tx, userId: string, jobId: string) {
+  return tx.jobMatch.findFirst({
+    where: { userId, jobId, isCurrent: true },
+    include: matchInclude,
   });
 }
 
-export function findMatches(tx: Tx, userId: string, take = 200) {
+/** One match version with its per-requirement results (in requirement order). */
+export function findMatchById(tx: Tx, userId: string, matchId: string) {
+  return tx.jobMatch.findFirst({
+    where: { id: matchId, userId },
+    include: {
+      ...matchInclude,
+      requirementResults: {
+        orderBy: { position: "asc" },
+        include: {
+          requirement: {
+            select: {
+              id: true,
+              category: true,
+              requirementType: true,
+              text: true,
+              sourceText: true,
+              sourceReference: true,
+              confidence: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+/** All match versions of a job for this user, newest first (history is never deleted). */
+export function findMatchHistory(tx: Tx, userId: string, jobId: string, take = 50) {
   return tx.jobMatch.findMany({
-    where: { userId, job: { deletedAt: null } },
-    include: { job: { select: { id: true, title: true, company: { select: { name: true } } } } },
-    orderBy: [{ computedAt: "desc" }],
+    where: { userId, jobId },
+    select: {
+      id: true,
+      overallStatus: true,
+      isCurrent: true,
+      matchingVersion: true,
+      computedAt: true,
+      counts: true,
+      semanticAssist: true,
+      requirementSet: { select: { version: true } },
+    },
+    orderBy: { computedAt: "desc" },
     take,
   });
 }
 
-export interface MatchRow {
+export function findCurrentMatches(
+  tx: Tx,
+  userId: string,
+  filter: { statuses?: string[]; take?: number } = {},
+) {
+  return tx.jobMatch.findMany({
+    where: {
+      userId,
+      isCurrent: true,
+      job: { deletedAt: null },
+      ...(filter.statuses?.length ? { overallStatus: { in: filter.statuses } } : {}),
+    },
+    include: {
+      job: {
+        select: {
+          id: true,
+          title: true,
+          contentHash: true,
+          status: true,
+          company: { select: { name: true } },
+          requirementSets: { where: { isCurrent: true }, select: { id: true } },
+        },
+      },
+    },
+    orderBy: [{ computedAt: "desc" }],
+    take: filter.take ?? 200,
+  });
+}
+
+/** Current match status per job (for list indicators). */
+export function findCurrentStatuses(tx: Tx, userId: string, jobIds: string[]) {
+  if (!jobIds.length) return Promise.resolve([]);
+  return tx.jobMatch.findMany({
+    where: { userId, isCurrent: true, jobId: { in: jobIds } },
+    select: {
+      id: true,
+      jobId: true,
+      overallStatus: true,
+      matchingVersion: true,
+      candidateSnapshotHash: true,
+      jobContentHash: true,
+      requirementSetId: true,
+    },
+  });
+}
+
+export interface MatchVersionRow {
   candidateId: string;
+  requirementSetId: string;
   overallStatus: string;
-  summaryScore: number | null;
-  hardBlock: boolean;
   hardBlockReason: string | null;
   explanation: object;
+  summary: string;
+  counts: object;
   matchingVersion: string;
   candidateSnapshotHash: string;
   jobContentHash: string;
+  semanticAssist: string;
+  aiGenerationId: string | null;
+  durationMs: number;
   dimensions: {
     dimension: Dimension;
     status: string;
@@ -84,20 +176,71 @@ export interface MatchRow {
     summary: string;
     evidence: object[];
   }[];
+  results: {
+    requirementId: string;
+    position: number;
+    status: string;
+    relationship: string | null;
+    gapKind: string | null;
+    isHardBlock: boolean;
+    evidence: object[];
+    explanation: string;
+    method: string;
+  }[];
 }
 
-/** Upsert a match and fully replace its dimensions (one current result per user + job). */
-export async function upsertMatch(tx: Tx, userId: string, jobId: string, row: MatchRow) {
-  const { dimensions, ...fields } = row;
-  const data = { ...fields, freshness: "CURRENT", computedAt: new Date() };
-  const match = await tx.jobMatch.upsert({
-    where: { userId_jobId: { userId, jobId } },
-    create: { ...data, userId, jobId },
+/**
+ * Store a NEW match version and make it current. Earlier versions are kept (is_current = false)
+ * so match history stays traceable. The caller holds a row lock on the job for this user.
+ */
+export async function insertMatchVersion(
+  tx: Tx,
+  userId: string,
+  jobId: string,
+  row: MatchVersionRow,
+) {
+  const { dimensions, results, ...fields } = row;
+  await tx.jobMatch.updateMany({
+    where: { userId, jobId, isCurrent: true },
+    data: { isCurrent: false },
+  });
+  const match = await tx.jobMatch.create({
+    data: {
+      ...fields,
+      userId,
+      jobId,
+      isCurrent: true,
+      freshness: "CURRENT",
+      hardBlock: fields.overallStatus === "BLOCKED",
+      summaryScore: null,
+      computedAt: new Date(),
+    },
+  });
+  if (dimensions.length)
+    await tx.jobMatchDimension.createMany({
+      data: dimensions.map((d) => ({ ...d, matchId: match.id, userId })),
+    });
+  if (results.length)
+    await tx.jobMatchRequirementResult.createMany({
+      data: results.map((r) => ({ ...r, matchId: match.id, userId })),
+    });
+  return match;
+}
+
+// --- Matching preferences ------------------------------------------------------------
+
+export function findMatchingPreferences(tx: Tx, userId: string) {
+  return tx.matchingPreferences.findUnique({ where: { userId } });
+}
+
+export function upsertMatchingPreferences(
+  tx: Tx,
+  userId: string,
+  data: Omit<Prisma.MatchingPreferencesUncheckedCreateInput, "userId" | "id">,
+) {
+  return tx.matchingPreferences.upsert({
+    where: { userId },
+    create: { ...data, userId },
     update: data,
   });
-  await tx.jobMatchDimension.deleteMany({ where: { matchId: match.id } });
-  await tx.jobMatchDimension.createMany({
-    data: dimensions.map((d) => ({ ...d, matchId: match.id, userId })),
-  });
-  return findMatch(tx, userId, jobId);
 }

@@ -9,7 +9,6 @@ import { isPublicHttpUrl } from "@/lib/safe-url";
 import { countryName } from "@/modules/candidate/labels";
 import { optionLabel } from "@/modules/candidate/options";
 import { formatSalary } from "@/modules/jobs/format";
-import { getProfile } from "@/modules/candidate";
 import { getJob } from "@/modules/jobs/jobs.service";
 import { getJobCatalogContext } from "@/modules/jobs/search/job-detail.service";
 import { SOURCE_LABELS } from "@/modules/jobs/search/search.service";
@@ -17,7 +16,7 @@ import { JobStateButton } from "@/modules/jobs/ui/job-state-button";
 import { getMatchForJob } from "@/modules/matching/match.service";
 import { ensureJobRequirements } from "@/modules/matching/requirements/requirements.service";
 import { RequirementsCard } from "@/modules/matching/ui/requirements-card";
-import { MatchPanel } from "@/modules/matching/ui/match-panel";
+import { MatchCard } from "@/modules/matching/ui/match-card";
 import type { JobStatus, RemoteStatus, SalaryPeriod } from "@/modules/jobs/types";
 import { DeleteJobButton } from "@/modules/jobs/ui/delete-job-button";
 import { JobStatusBadge, RemoteBadge } from "@/modules/jobs/ui/job-badges";
@@ -111,8 +110,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
   });
   if (!result) return <NotFound />;
   const { job, canEdit } = result;
-  const [profile, requirementResult, match, catalog] = await Promise.all([
-    getProfile(actor),
+  const [requirementResult, matchResult, catalog] = await Promise.all([
     // A failing requirements step must not take the whole job page down.
     ensureJobRequirements(actor, job.id).then(
       (r) => ({ set: r.set, problem: null }),
@@ -125,7 +123,17 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
         return { set: null, problem };
       },
     ),
-    getMatchForJob(actor, job.id),
+    getMatchForJob(actor, job.id).then(
+      (r) => ({ ...r, problem: null }),
+      (error: unknown) => {
+        const problem = isSchemaOutOfDate(error) ? ("migration" as const) : ("error" as const);
+        logger.error("job match unavailable", {
+          problem,
+          error: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+        });
+        return { match: null, hasProfile: true, problem };
+      },
+    ),
     getJobCatalogContext(actor, job.id),
   ]);
   const salary = formatSalary({
@@ -215,11 +223,13 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
         </div>
 
         <div className="flex flex-col gap-5">
-          <MatchPanel
+          <MatchCard
+            jobId={job.id}
             data={{
-              hasProfile: Boolean(profile),
+              hasProfile: matchResult.hasProfile,
               requirementCount: requirementResult.set?.requirements.length ?? 0,
-              match,
+              problem: matchResult.problem ?? requirementResult.problem,
+              match: matchResult.match,
             }}
           />
           <Card>

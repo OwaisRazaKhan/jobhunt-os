@@ -45,7 +45,7 @@ export interface AiProvider {
   health(model: string): Promise<ProviderHealth>;
 }
 
-export type AiTask = "candidate.extract_facts";
+export type AiTask = "candidate.extract_facts" | "matching.semantic_skills";
 
 export interface ModelChoice {
   provider: AiProvider;

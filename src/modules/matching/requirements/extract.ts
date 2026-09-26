@@ -199,6 +199,17 @@ const DEGREE_LEVELS: [string, RegExp][] = [
   ["ANY_DEGREE", /\b(university degree|college degree|degree)\b/i],
 ];
 
+/** Degree level stated in a piece of text (DOCTORATE … DIPLOMA, ANY_DEGREE), or null. */
+export function degreeLevel(text: string): string | null {
+  if (
+    !/\b(degree|bachelor|master|mba|bba|ph\.?\s?d|doctorate|diploma|b\.?\s?tech|b\.?\s?sc|m\.?\s?sc|b\.?\s?com|b\.?\s?a\.|m\.?\s?a\.|b\.?\s?e\.)/i.test(
+      text,
+    )
+  )
+    return null;
+  return DEGREE_LEVELS.find(([, re]) => re.test(text))?.[0] ?? "ANY_DEGREE";
+}
+
 function education(line: string) {
   if (
     !/\b(degree|bachelor|master|mba|bba|ph\.?\s?d|doctorate|diploma|b\.?\s?tech|b\.?\s?sc|m\.?\s?sc)\b/i.test(
