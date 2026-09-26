@@ -121,6 +121,8 @@ model User {
   discoveryRuns       DiscoveryRun[]
   sourceSyncRuns      SourceSyncRun[]
   jobMatchDimensions  JobMatchDimension[]
+  jobStates           UserJobState[]
+  savedSearches       SavedSearch[]
 
   @@map("users")
 }
@@ -748,63 +750,65 @@ model Company {
 }
 
 model Job {
-  id                  String    @id @default(uuid(7)) @db.Uuid
-  companyId           String    @map("company_id") @db.Uuid
-  sourceId            String?   @map("source_id") @db.Uuid
+  id                  String                   @id @default(uuid(7)) @db.Uuid
+  companyId           String                   @map("company_id") @db.Uuid
+  sourceId            String?                  @map("source_id") @db.Uuid
   /// MANUAL | ASHBY | LEVER | GREENHOUSE
-  sourceKey           String    @map("source_key")
+  sourceKey           String                   @map("source_key")
   /// MANUAL | ATS_PUBLIC_API
-  sourceType          String    @map("source_type")
+  sourceType          String                   @map("source_type")
   /// USER_ENTERED | DISCOVERED
-  sourceStatus        String    @map("source_status")
-  externalJobId       String?   @map("external_job_id")
+  sourceStatus        String                   @map("source_status")
+  externalJobId       String?                  @map("external_job_id")
   title               String
-  normalizedTitle     String    @map("normalized_title")
+  normalizedTitle     String                   @map("normalized_title")
   /// Plain text only; rendered escaped, never as HTML
   description         String
-  locationRaw         String    @map("location_raw")
+  locationRaw         String                   @map("location_raw")
   city                String?
   region              String?
-  countryCode         String?   @map("country_code") @db.Char(2)
-  employmentType      String    @default("UNKNOWN") @map("employment_type")
-  employmentTypeRaw   String?   @map("employment_type_raw")
-  remoteStatus        String    @default("UNKNOWN") @map("remote_status")
-  remoteStatusRaw     String?   @map("remote_status_raw")
-  relocationAvailable String    @default("UNKNOWN") @map("relocation_available")
-  salaryMin           Int?      @map("salary_min")
-  salaryMax           Int?      @map("salary_max")
-  salaryCurrency      String?   @map("salary_currency") @db.Char(3)
-  salaryPeriod        String?   @map("salary_period")
-  salaryRaw           String?   @map("salary_raw")
-  postedAt            DateTime? @map("posted_at") @db.Date
-  discoveredAt        DateTime  @default(now()) @map("discovered_at") @db.Timestamptz(3)
-  lastSeenAt          DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
-  jobUrl              String    @map("job_url")
-  applicationUrl      String?   @map("application_url")
-  sourceUrl           String?   @map("source_url")
-  visaTextRaw         String?   @map("visa_text_raw")
+  countryCode         String?                  @map("country_code") @db.Char(2)
+  employmentType      String                   @default("UNKNOWN") @map("employment_type")
+  employmentTypeRaw   String?                  @map("employment_type_raw")
+  remoteStatus        String                   @default("UNKNOWN") @map("remote_status")
+  remoteStatusRaw     String?                  @map("remote_status_raw")
+  relocationAvailable String                   @default("UNKNOWN") @map("relocation_available")
+  salaryMin           Int?                     @map("salary_min")
+  salaryMax           Int?                     @map("salary_max")
+  salaryCurrency      String?                  @map("salary_currency") @db.Char(3)
+  salaryPeriod        String?                  @map("salary_period")
+  salaryRaw           String?                  @map("salary_raw")
+  postedAt            DateTime?                @map("posted_at") @db.Date
+  discoveredAt        DateTime                 @default(now()) @map("discovered_at") @db.Timestamptz(3)
+  lastSeenAt          DateTime                 @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  jobUrl              String                   @map("job_url")
+  applicationUrl      String?                  @map("application_url")
+  sourceUrl           String?                  @map("source_url")
+  visaTextRaw         String?                  @map("visa_text_raw")
   department          String?
   team                String?
   /// INTERNSHIP | ENTRY_LEVEL | GRADUATE | JUNIOR | MID_LEVEL | SENIOR | LEAD | UNKNOWN — only from explicit wording
-  experienceLevel     String    @default("UNKNOWN") @map("experience_level")
+  experienceLevel     String                   @default("UNKNOWN") @map("experience_level")
   /// The exact wording the experience level was read from (e.g. "Intern" in the title)
-  experienceLevelRaw  String?   @map("experience_level_raw")
+  experienceLevelRaw  String?                  @map("experience_level_raw")
   /// sha256(normalized company | normalized title | location key) — layer-2 dedupe key
-  dedupeFingerprint   String?   @map("dedupe_fingerprint") @db.Char(64)
-  sourceUpdatedAt     DateTime? @map("source_updated_at") @db.Timestamptz(3)
-  lastContentChangeAt DateTime? @map("last_content_change_at") @db.Timestamptz(3)
-  closedAt            DateTime? @map("closed_at") @db.Timestamptz(3)
+  dedupeFingerprint   String?                  @map("dedupe_fingerprint") @db.Char(64)
+  sourceUpdatedAt     DateTime?                @map("source_updated_at") @db.Timestamptz(3)
+  lastContentChangeAt DateTime?                @map("last_content_change_at") @db.Timestamptz(3)
+  closedAt            DateTime?                @map("closed_at") @db.Timestamptz(3)
   /// Private notes of the creator (PRIVATE jobs only)
   notes               String?
-  contentHash         String    @map("content_hash") @db.Char(64)
+  contentHash         String                   @map("content_hash") @db.Char(64)
   /// OPEN | CLOSED | STALE | UNKNOWN
-  status              String    @default("OPEN")
+  status              String                   @default("OPEN")
   /// PUBLIC | PRIVATE
   visibility          String
-  createdByUserId     String?   @map("created_by_user_id") @db.Uuid
-  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdByUserId     String?                  @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime?                @map("deleted_at") @db.Timestamptz(3)
+  /// Generated full-text vector (title, location, department, description) — read via raw SQL only
+  searchVector        Unsupported("tsvector")? @map("search_vector")
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   source    JobSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
@@ -818,13 +822,18 @@ model Job {
   profileHits         JobSearchProfileHit[]
   duplicateOf         JobDuplicateCandidate[] @relation("DuplicateCandidateJob")
   duplicatedBy        JobDuplicateCandidate[] @relation("DuplicateCandidateOriginal")
+  userStates          UserJobState[]
 
   @@index([createdByUserId, deletedAt, createdAt(sort: Desc)])
   @@index([visibility, status])
   @@index([companyId])
   @@index([sourceId])
-  @@index([countryCode])
   @@index([dedupeFingerprint])
+  @@index([countryCode, remoteStatus])
+  @@index([postedAt(sort: Desc)])
+  @@index([discoveredAt(sort: Desc)])
+  @@index([lastSeenAt(sort: Desc)])
+  @@index([sourceKey])
   @@map("jobs")
 }
 
@@ -996,6 +1005,7 @@ model JobSourcePosting {
   @@unique([sourceKey, board, externalJobId])
   @@index([jobId])
   @@index([sourceKey, board, removedAt])
+  @@index([sourceKey, jobId])
   @@map("job_source_postings")
 }
 
@@ -1249,4 +1259,39 @@ model JobMatchDimension {
   @@unique([matchId, dimension])
   @@index([userId])
   @@map("job_match_dimensions")
+}
+
+/// Phase 3: the user's own state for a shared job (bookmark / hide). Never changes the job.
+model UserJobState {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  jobId        String    @map("job_id") @db.Uuid
+  bookmarkedAt DateTime? @map("bookmarked_at") @db.Timestamptz(3)
+  hiddenAt     DateTime? @map("hidden_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@index([jobId])
+  @@map("user_job_states")
+}
+
+/// Phase 3: a saved /jobs query + filter state (distinct from a Search Profile).
+model SavedSearch {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  name      String
+  /// Validated JobSearchParams (src/modules/jobs/search/params.ts)
+  params    Json      @default("{}")
+  lastRunAt DateTime? @map("last_run_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@map("saved_searches")
 }

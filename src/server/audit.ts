@@ -67,7 +67,15 @@ export type AuditAction =
   | "search_config_updated"
   | "discovery_started"
   | "discovery_finished"
-  | "source_tested";
+  | "source_tested"
+  | "job_bookmarked"
+  | "job_unbookmarked"
+  | "job_hidden"
+  | "job_restored"
+  | "saved_search_created"
+  | "saved_search_updated"
+  | "saved_search_duplicated"
+  | "saved_search_deleted";
 
 export interface AuditEntry {
   userId: string;

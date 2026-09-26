@@ -53,7 +53,9 @@ Each phase ends with a review and **explicit approval** before the next begins. 
 - **Not included:** AI enrichment, matching, search UI polish.
 - **Scope update (2026-09-26):** India as a first-class market, configurable locations/categories/search terms, user-owned Search Profiles driving discovery, multi-layer dedupe. See [job-discovery.md](./job-discovery.md).
 
-## Phase 3 — Job Database
+## Phase 3 — Job Database ✅ (awaiting approval — see job-search.md)
+
+> As built: server-side full-text search + filters (country, city/region, category, work mode, employment type, experience level, salary without currency conversion, source, status, freshness, search profile), allowlisted sorting, pagination, saved searches, bookmarks and hidden jobs. Canonical jobs, dedupe and rule classification were delivered in Phase 2. Not built here: Job Analysis Agent (AI requirement extraction) and a labelled duplicate-rate study.
 
 - **Objective:** a clean, searchable canonical job catalog.
 - **Dependencies:** Phase 2.

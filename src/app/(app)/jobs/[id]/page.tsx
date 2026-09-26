@@ -11,6 +11,9 @@ import { optionLabel } from "@/modules/candidate/options";
 import { formatSalary } from "@/modules/jobs/format";
 import { getProfile } from "@/modules/candidate";
 import { getJob } from "@/modules/jobs/jobs.service";
+import { getJobCatalogContext } from "@/modules/jobs/search/job-detail.service";
+import { SOURCE_LABELS } from "@/modules/jobs/search/search.service";
+import { JobStateButton } from "@/modules/jobs/ui/job-state-button";
 import { getMatchForJob, listJobRequirements } from "@/modules/matching/match.service";
 import { MatchPanel } from "@/modules/matching/ui/match-panel";
 import type { JobStatus, RemoteStatus, SalaryPeriod } from "@/modules/jobs/types";
@@ -29,6 +32,18 @@ const dash = (
 );
 const known = (v: string | null | undefined) => (v && v !== "UNKNOWN" ? optionLabel(v) : null);
 const stamp = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+/** Normalised value plus the source's own wording, when it differs. */
+const withRaw = (value: string | null, raw: string | null) =>
+  value ? (
+    <>
+      {value}
+      {raw && raw.toLowerCase() !== value.toLowerCase() && (
+        <span className="text-fg-subtle block text-[11px]">source: “{raw}”</span>
+      )}
+    </>
+  ) : raw ? (
+    <span className="text-fg-muted">Unknown (source: “{raw}”)</span>
+  ) : null;
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -92,10 +107,11 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
   });
   if (!result) return <NotFound />;
   const { job, canEdit } = result;
-  const [profile, requirements, match] = await Promise.all([
+  const [profile, requirements, match, catalog] = await Promise.all([
     getProfile(actor),
     listJobRequirements(actor, job.id),
     getMatchForJob(actor, job.id),
+    getJobCatalogContext(actor, job.id),
   ]);
   const salary = formatSalary({
     salaryMin: job.salaryMin,
@@ -124,7 +140,25 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
             <RemoteBadge status={job.remoteStatus as RemoteStatus} />
             <Badge>{sourceName}</Badge>
             {job.sourceStatus === "USER_ENTERED" && <Badge tone="neutral">User entered</Badge>}
+            {catalog.bookmarkedAt && <Badge tone="accent">Bookmarked</Badge>}
+            {catalog.hiddenAt && <Badge tone="warning">Hidden from your results</Badge>}
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {!catalog.hiddenAt && (
+            <JobStateButton
+              jobId={job.id}
+              title={job.title}
+              change={catalog.bookmarkedAt ? "unbookmark" : "bookmark"}
+              showLabel
+            />
+          )}
+          <JobStateButton
+            jobId={job.id}
+            title={job.title}
+            change={catalog.hiddenAt ? "restore" : "hide"}
+            showLabel
+          />
         </div>
         {canEdit && (
           <div className="flex gap-2">
@@ -166,10 +200,18 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
             <CardHeader title="Details" />
             <dl className="divide-border divide-y py-1">
               <Row label="Company">{job.company.name}</Row>
-              <Row label="Location">{job.locationRaw}</Row>
+              <Row label="Location (source)">{job.locationRaw}</Row>
+              <Row label="City / region">
+                {[job.city, job.region].filter(Boolean).join(", ") || null}
+              </Row>
               <Row label="Country">{job.countryCode ? countryName(job.countryCode) : null}</Row>
-              <Row label="Employment type">{known(job.employmentType)}</Row>
-              <Row label="Work mode">{known(job.remoteStatus)}</Row>
+              <Row label="Employment type">
+                {withRaw(known(job.employmentType), job.employmentTypeRaw)}
+              </Row>
+              <Row label="Work mode">{withRaw(known(job.remoteStatus), job.remoteStatusRaw)}</Row>
+              <Row label="Experience level">
+                {withRaw(known(job.experienceLevel), job.experienceLevelRaw)}
+              </Row>
               <Row label="Relocation">{known(job.relocationAvailable)}</Row>
               <Row label="Salary">
                 {salary ? <span className="font-mono">{salary}</span> : null}
@@ -191,9 +233,96 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
               <Row label="Source">{sourceName}</Row>
               <Row label="Source type">{optionLabel(job.sourceType)}</Row>
               <Row label="Source status">{optionLabel(job.sourceStatus)}</Row>
-              <Row label="Created">{stamp(job.createdAt)}</Row>
+              <Row label="Discovered">{stamp(job.discoveredAt)}</Row>
+              <Row label="Last seen at source">{stamp(job.lastSeenAt)}</Row>
+              {job.closedAt && <Row label="Closed">{stamp(job.closedAt)}</Row>}
               <Row label="Last updated">{stamp(job.updatedAt)}</Row>
             </dl>
+            {catalog.postings.length > 0 && (
+              <div className="border-border border-t px-4 py-3">
+                <p className="text-fg-muted text-xs font-medium">
+                  Source postings ({catalog.postings.length})
+                </p>
+                <ul className="mt-1.5 flex flex-col gap-1.5">
+                  {catalog.postings.map((p) => (
+                    <li key={p.id} className="text-xs">
+                      <span className="text-fg">{SOURCE_LABELS[p.sourceKey] ?? p.sourceKey}</span>{" "}
+                      <span className="text-fg-muted font-mono">
+                        {p.board} / {p.externalJobId}
+                      </span>
+                      <span className="text-fg-subtle block font-mono text-[11px]">
+                        first {stamp(p.firstSeenAt)} · last {stamp(p.lastSeenAt)}
+                        {p.removedAt ? ` · removed ${stamp(p.removedAt)}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+          <Card>
+            <CardHeader
+              title="Found by your search profiles"
+              description="Which of your Search Profiles linked this job, and when."
+            />
+            {catalog.hits.length === 0 ? (
+              <p className="text-fg-muted px-4 py-3 text-xs">
+                Not linked to any of your search profiles.
+              </p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {catalog.hits.map((h) => (
+                  <li key={h.profile.id} className="px-4 py-2 text-xs">
+                    <Link
+                      href={`/jobs?profile=${h.profile.id}`}
+                      className="text-fg font-medium hover:underline"
+                    >
+                      {h.profile.name}
+                    </Link>
+                    <span className="text-fg-subtle block font-mono text-[11px]">
+                      first {stamp(h.firstMatchedAt)} · last {stamp(h.lastMatchedAt)}
+                    </span>
+                    {h.discoveryRunId && (
+                      <Link
+                        href={`/jobs/discovery?profile=${h.profile.id}&run=${h.discoveryRunId}`}
+                        className="text-info text-[11px] hover:underline"
+                      >
+                        View discovery run
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card>
+            <CardHeader
+              title="Categories"
+              description="Catalog classification from search terms — never a statement about you."
+            />
+            {catalog.categories.length === 0 ? (
+              <p className="text-fg-muted px-4 py-3 text-xs">Not classified into any category.</p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {catalog.categories.map((c) => (
+                  <li key={`${c.category.id}-${c.own}`} className="px-4 py-2 text-xs">
+                    <span className="text-fg font-medium">{c.category.name}</span>{" "}
+                    <Badge tone={c.method === "AI" ? "ai" : "neutral"}>
+                      {c.method === "AI" ? `AI${c.model ? ` · ${c.model}` : ""}` : "Rule"}
+                    </Badge>{" "}
+                    <span className="text-fg-subtle font-mono text-[11px]">
+                      {Math.round(c.confidence * 100)}% · {c.classifierVersion}
+                      {c.own ? " · your terms" : ""}
+                    </span>
+                    {c.matchedTerms.length > 0 && (
+                      <span className="text-fg-muted block text-[11px]">
+                        matched: {c.matchedTerms.join(", ")}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
           {canEdit && job.notes && (
             <Card>

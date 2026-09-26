@@ -27,6 +27,12 @@ Migration `20260927020000_phase2_discovery`: `market_locations`, `job_categories
 - `companies` + `jobs` (migration `20260927010000_phase2_manual_jobs`): companies are a shared catalog (app may read/insert, never update/delete). Jobs have `visibility` PUBLIC (shared, written by the system) or PRIVATE (user-entered, visible/editable only by `created_by_user_id`). Manual jobs are forced by CHECK to MANUAL / USER_ENTERED / PRIVATE. No DELETE grant: jobs are soft-deleted and purged after 30 days (`npm run maintenance:purge`). Partial unique index `(source_id, external_job_id)` prepares discovered-job identity.
 - The same migration retrofitted all Phase 1 policies to `(SELECT app_current_user_id())` (evaluated once per statement) and pinned the function `search_path`.
 
+## 0c. Phase 3 as built (job search)
+
+Migration `20260929000000_phase3_job_search`: generated `jobs.search_vector` (tsvector, GIN),
+filter/sort indexes, owner-only `user_job_states` (bookmark / hide) and `saved_searches`.
+Details: [job-search.md](./job-search.md).
+
 ## 1. Conventions
 
 | Topic            | Rule                                                                                                                                                                                              |
