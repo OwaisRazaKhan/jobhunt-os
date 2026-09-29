@@ -24,7 +24,9 @@
     "storage:setup": "tsx scripts/setup-storage.ts",
     "ai:check": "tsx scripts/ai-check.ts",
     "maintenance:purge": "tsx --conditions=react-server scripts/purge-soft-deleted.ts",
-    "scheduler": "tsx scripts/scheduler.ts"
+    "scheduler": "tsx scripts/scheduler.ts",
+    "worker:applications": "tsx --conditions=react-server scripts/application-worker.ts",
+    "fixture:application": "tsx --conditions=react-server scripts/application-fixture.ts"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
@@ -38,6 +40,7 @@
     "next": "16.3.6",
     "pdfkit": "^0.20.2",
     "pg": "^8.23.0",
+    "playwright-core": "^1.63.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",

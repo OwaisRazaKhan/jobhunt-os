@@ -106,7 +106,9 @@ export type AiTask =
   | "research.synthesize"
   | "resume.tailor"
   | "email.generate"
-  | "cover_letter.generate";
+  | "cover_letter.generate"
+  | "application.answers"
+  | "application.map_fields";
 
 export interface ModelChoice {
   provider: AiProvider;

@@ -6,6 +6,7 @@ import {
   duplicatePackageAction,
   recheckPackageAction,
 } from "@/app/(app)/communication-packages/actions";
+import { createApplicationAction } from "@/app/(app)/applications/actions";
 import { InlineAction } from "@/components/forms/inline-action";
 import { Alert, Badge, PageHeader } from "@/components/ui/primitives";
 import { isUuid } from "@/lib/ids";
@@ -109,6 +110,15 @@ export default async function PackagePage({ params }: PageProps<"/communication-
           These exact approved versions are locked for the application step. Nothing has been
           submitted or sent. Any later change to an underlying asset marks this package stale
           instead of changing it.
+          <div className="mt-2">
+            <InlineAction
+              action={createApplicationAction}
+              hidden={{ packageId: pkg.id }}
+              variant="primary"
+            >
+              Create application
+            </InlineAction>
+          </div>
         </Alert>
       )}
       {status === "STALE" && (

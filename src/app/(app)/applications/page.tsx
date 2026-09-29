@@ -52,12 +52,17 @@ export default async function ApplicationsPage({ searchParams }: PageProps<"/app
         title="Applications"
         description="Each application is one attempt at one job, built from a communication package that is ready for application. Nothing is submitted without your approval, and a submission is only recorded when there is real evidence of it."
         actions={
-          <Link
-            href="/communication-packages?status=READY_FOR_APPLICATION"
-            className={buttonClass("secondary", "sm")}
-          >
-            Ready packages
-          </Link>
+          <>
+            <Link href="/applications/settings" className={buttonClass("ghost", "sm")}>
+              Settings
+            </Link>
+            <Link
+              href="/communication-packages?status=READY_FOR_APPLICATION"
+              className={buttonClass("secondary", "sm")}
+            >
+              Ready packages
+            </Link>
+          </>
         }
       />
       <Alert tone="info" title="Human approval by default">

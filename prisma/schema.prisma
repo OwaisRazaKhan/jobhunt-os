@@ -172,6 +172,8 @@ model User {
   applicationEvidence      ApplicationEvidence[]
   applicationEvents        ApplicationEvent[]
 
+  applicationSettings ApplicationSettings?
+
   @@map("users")
 }
 
@@ -2413,6 +2415,7 @@ model RecipientContext {
   confidence         String    @default("MEDIUM")
   notes              String?
   verifiedAt         DateTime? @map("verified_at") @db.Timestamptz(3)
+  lastVerifiedAt     DateTime? @map("last_verified_at") @db.Timestamptz(3)
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -2649,8 +2652,15 @@ model ApplicationAttempt {
   applicationId  String    @map("application_id") @db.Uuid
   attemptNumber  Int       @map("attempt_number")
   executionId    String    @unique @map("execution_id") @db.Uuid
-  /// RUNNING | PAUSED | NEEDS_HUMAN_INPUT | SUCCEEDED | FAILED | CANCELLED | UNCERTAIN
-  status         String    @default("RUNNING")
+  /// QUEUED | RUNNING | PAUSED | NEEDS_HUMAN_INPUT | SUCCEEDED | FAILED | CANCELLED | UNCERTAIN
+  status         String    @default("QUEUED")
+  /// INSPECT | FILL | FILL_AND_SUBMIT | SUBMIT
+  phase          String    @default("FILL")
+  /// NONE | PAUSE | RESUME | STOP — set by the user, obeyed by the worker between steps
+  controlCommand String    @default("NONE") @map("control_command")
+  /// What the human must do when the attempt waits (e.g. "Complete the CAPTCHA")
+  humanAction    String?   @map("human_action")
+  heartbeatAt    DateTime? @map("heartbeat_at") @db.Timestamptz(3)
   mode           String
   adapter        String
   adapterVersion String    @map("adapter_version")
@@ -2678,22 +2688,26 @@ model ApplicationAttempt {
 
 /// An inspected application form (public structure only) and its fingerprint.
 model ApplicationForm {
-  id              String   @id @default(uuid(7)) @db.Uuid
-  userId          String   @map("user_id") @db.Uuid
-  applicationId   String   @map("application_id") @db.Uuid
-  channelId       String?  @map("channel_id") @db.Uuid
-  url             String
-  provider        String
-  adapter         String
-  adapterVersion  String   @map("adapter_version")
-  formFingerprint String   @map("form_fingerprint") @db.Char(64)
-  schemaVersion   Int      @default(1) @map("schema_version")
-  fieldMapVersion Int      @default(0) @map("field_map_version")
+  id               String   @id @default(uuid(7)) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  applicationId    String   @map("application_id") @db.Uuid
+  channelId        String?  @map("channel_id") @db.Uuid
+  url              String
+  provider         String
+  adapter          String
+  adapterVersion   String   @map("adapter_version")
+  formFingerprint  String   @map("form_fingerprint") @db.Char(64)
+  /// API (official ATS API) | BROWSER (page inspection) | FIXTURE (controlled test page)
+  inspectionSource String   @default("BROWSER") @map("inspection_source")
+  /// True only for the controlled test fixture adapter — never a real application
+  isTestAdapter    Boolean  @default(false) @map("is_test_adapter")
+  schemaVersion    Int      @default(1) @map("schema_version")
+  fieldMapVersion  Int      @default(0) @map("field_map_version")
   /// CURRENT | SUPERSEDED | CHANGED
-  status          String   @default("CURRENT")
-  discoveredAt    DateTime @default(now()) @map("discovered_at") @db.Timestamptz(3)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  status           String   @default("CURRENT")
+  discoveredAt     DateTime @default(now()) @map("discovered_at") @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
@@ -2930,4 +2944,20 @@ model ApplicationEvent {
   @@index([attemptId])
   @@index([userId])
   @@map("application_events")
+}
+
+/// Per-user application automation policy (enforced server-side). Default: human approval.
+model ApplicationSettings {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  userId                String   @unique @map("user_id") @db.Uuid
+  /// MANUAL_ONLY | HUMAN_APPROVAL | AUTO_FILL_REVIEW_SUBMIT
+  defaultAutomationMode String   @default("HUMAN_APPROVAL") @map("default_automation_mode")
+  /// Minimum mapping confidence for automatic filling: EXACT | HIGH
+  autoFillMinConfidence String   @default("HIGH") @map("auto_fill_min_confidence")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("application_settings")
 }

@@ -52,6 +52,19 @@ export function assertTransition(from: ApplicationStatus, to: ApplicationStatus)
   if (!canTransition(from, to)) throw new InvalidTransitionError(from, to);
 }
 
+/**
+ * Manual path: the candidate applied outside JOBHUNT OS and confirms it. Only a USER_CONFIRMED
+ * submission may jump to SUBMITTED from these states (DB trigger enforces the same rule).
+ */
+export const MANUAL_CONFIRM_FROM: readonly ApplicationStatus[] = [
+  "IN_PROGRESS",
+  "NEEDS_HUMAN_INPUT",
+  "READY",
+  "READY_TO_SUBMIT",
+  "FAILED",
+  "BLOCKED",
+];
+
 /** Statuses in which the application content (fields, answers, files) may still be edited. */
 export const EDITABLE_STATUSES: readonly ApplicationStatus[] = [
   "DRAFT",

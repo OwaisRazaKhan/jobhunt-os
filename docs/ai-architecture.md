@@ -38,9 +38,12 @@ No business module imports a provider.
 | `resume.tailor`            | 6     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | deterministic | 1       | 4000       |
 | `email.generate`           | 7     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | manual        | 1       | 3000       |
 | `cover_letter.generate`    | 7     | PRIVATE_CANDIDATE | ollama               | ollama, gemini | manual        | 1       | 5000       |
+| `application.answers`      | 8     | HIGH_SENSITIVITY  | ollama               | ollama         | deterministic | 1       | 2500       |
+| `application.map_fields`   | 8     | INTERNAL          | ollama               | ollama, gemini | deterministic | 1       | 1500       |
 
-Planned (declared, not routable until built): job requirement extraction, resume quality analysis,
-application answers (HIGH_SENSITIVITY).
+Planned (declared, not routable until built): job requirement extraction, resume quality analysis.
+`application.answers` never leaves the machine (HIGH_SENSITIVITY); `application.map_fields` sends only
+public form labels and fixed key names — never candidate values (see `docs/application-engine.md` §8–9).
 
 ### 0.3 Privacy routing (applied before preferences; cannot be overridden by the client)
 
@@ -311,7 +314,7 @@ Common rules for all agents: output validated by Zod; persisted as an `ai_genera
 | Failure modes  | Wrong recipient/company, overly long or spammy tone, fabricated shared connections, injection via prior inbound email. |
 | Human approval | Required for every send; approval binds to the exact subject/body hash.                                                |
 
-### 3.9 Application Answer Agent (Phase 7)
+### 3.9 Application Answer Agent (Phase 8 — built)
 
 |                |                                                                                                                                                                                                                                    |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -321,6 +324,13 @@ Common rules for all agents: output validated by Zod; persisted as an `ai_genera
 | Permissions    | Read: candidate facts incl. preferences; work authorization only for authorization questions. Write: DRAFT version.                                                                                                                |
 | Failure modes  | Answering legal/EEO questions, misrepresenting authorization status, inconsistent salary figures across applications.                                                                                                              |
 | Human approval | Required.                                                                                                                                                                                                                          |
+
+As built (Phase 8, `answer.service.ts`): task `application.answers`, local model only. Legal, salary,
+availability, preference, self-rating and demographic questions are classified as not generatable and never
+sent to the model. The question text is wrapped in `<application_question>` and treated as untrusted. Every
+sentence of a draft is re-audited with the communication claim auditor; unsupported sentences are removed,
+the result is cut to the character limit only at sentence boundaries, and an empty result becomes
+`NEEDS_USER_INPUT`. Answers are versioned; approval is per version and immutable.
 
 ### 3.10 Follow-up Agent (Phase 11)
 

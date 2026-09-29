@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   answerHash,
@@ -8,16 +9,26 @@ import {
   formFingerprint,
   type FormStructureField,
 } from "./hash";
-import { canTransition, TRANSITIONS } from "./state-machine";
+import { canTransition, MANUAL_CONFIRM_FROM, TRANSITIONS } from "./state-machine";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "./types";
 import { validateFieldValue, type FileValue } from "./validation";
 
+/** The most recent migration that (re)defines the status trigger function. */
+function latestGuardFunction(): string {
+  const dir = "prisma/migrations";
+  const defs = readdirSync(dir)
+    .filter((m) => /^\d{14}_/.test(m))
+    .sort()
+    .map((m) => readFileSync(join(dir, m, "migration.sql"), "utf8"))
+    .filter((sql) => sql.includes("FUNCTION applications_guard_status"));
+  const sql = defs.at(-1)!;
+  const from = sql.indexOf("FUNCTION applications_guard_status");
+  return sql.slice(from, sql.indexOf("$;", from));
+}
+
 describe("state machine", () => {
   it("TypeScript transitions match the database trigger exactly (all pairs)", () => {
-    const sql = readFileSync(
-      "prisma/migrations/20261029000000_phase8_application_engine/migration.sql",
-      "utf8",
-    );
+    const sql = latestGuardFunction();
     const dbTable = new Map<string, string[]>();
     for (const m of sql.matchAll(/WHEN '([A-Z_]+)' THEN ARRAY\[([^\]]*)\]/g))
       dbTable.set(
@@ -31,6 +42,14 @@ describe("state machine", () => {
           (dbTable.get(from) ?? []).includes(to),
         );
       }
+  });
+
+  it("the manual confirmation path matches the database", () => {
+    const sql = latestGuardFunction();
+    const m = sql.match(/'USER_CONFIRMED'\s+AND OLD\."status" = ANY \(ARRAY\[([^\]]*)\]/);
+    expect(m).toBeTruthy();
+    const list = [...m![1]!.matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]).sort();
+    expect(list).toEqual([...MANUAL_CONFIRM_FROM].sort());
   });
 
   it("rejects impossible transitions", () => {

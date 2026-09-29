@@ -138,6 +138,41 @@ export const TASKS: Record<AiTask, TaskPolicy> = {
     description:
       "Drafts cover letters from your facts, approved resume and sourced research; every statement passes claim validation.",
   },
+  "application.answers": {
+    task: "application.answers",
+    label: "Application answers",
+    phase: 8,
+    // Application answers can touch sensitive topics: local model only, never cloud.
+    sensitivity: "HIGH_SENSITIVITY",
+    defaultProvider: "ollama",
+    allowedProviders: ["ollama"],
+    structuredOutputRequired: true,
+    fallback: "deterministic",
+    maxRetries: 1,
+    maxOutputTokens: 2500,
+    timeoutMs: 300_000,
+    untrustedContent: true,
+    cacheable: false,
+    description:
+      "Drafts answers to custom application questions from your facts and sourced research; every statement passes claim validation. Legal, salary and demographic questions are never drafted.",
+  },
+  "application.map_fields": {
+    task: "application.map_fields",
+    label: "Application field mapping (ambiguous labels)",
+    phase: 8,
+    // Only public form labels and fixed key names are sent — no candidate data.
+    sensitivity: "INTERNAL",
+    defaultProvider: "ollama",
+    allowedProviders: ["ollama", "gemini"],
+    structuredOutputRequired: true,
+    fallback: "deterministic",
+    maxRetries: 1,
+    maxOutputTokens: 1500,
+    untrustedContent: true,
+    cacheable: false,
+    description:
+      "Suggests which profile field an ambiguous form label refers to (labels only; values come from your profile). Suggestions always need your review.",
+  },
 };
 
 /**
@@ -161,12 +196,6 @@ export const PLANNED_TASKS: readonly {
     label: "Resume quality analysis (rules today)",
     phase: 6,
     sensitivity: "PRIVATE_CANDIDATE",
-  },
-  {
-    task: "application.answers",
-    label: "Application answers",
-    phase: 8,
-    sensitivity: "HIGH_SENSITIVITY",
   },
 ];
 

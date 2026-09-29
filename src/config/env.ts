@@ -92,6 +92,37 @@ export const serverEnvSchema = z.object({
     .max(10_000_000)
     .default(1_500_000),
 
+  // Application Engine (Phase 8). Browser automation is OFF unless explicitly enabled; it never
+  // bypasses CAPTCHA, 2FA, sign-in or anti-bot checks. The browser is the locally installed Edge/Chrome.
+  APPLICATION_AUTOMATION_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  APPLICATION_BROWSER_HEADLESS: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  /** Installed browser used by playwright-core: msedge | chrome | chromium */
+  APPLICATION_BROWSER_CHANNEL: z.enum(["msedge", "chrome", "chromium"]).default("msedge"),
+  /** Whole attempt budget (includes waiting for your input) */
+  APPLICATION_WORKER_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(30_000)
+    .max(3_600_000)
+    .default(900_000),
+  /** Page load / form discovery / field interaction / upload */
+  APPLICATION_STEP_TIMEOUT_MS: z.coerce.number().int().min(2_000).max(120_000).default(30_000),
+  /** Waiting for a confirmation page after submit (then: SUBMISSION_UNCERTAIN, never a resubmit) */
+  APPLICATION_CONFIRMATION_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(2_000)
+    .max(120_000)
+    .default(20_000),
+  /** Controlled local test fixture origin (e.g. http://127.0.0.1:4010) — never set in production */
+  APPLICATION_FIXTURE_ORIGIN: z.url().optional(),
+
   // Upload limits
   MAX_UPLOAD_BYTES: z.coerce
     .number()

@@ -5,16 +5,16 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-29** — Phase 8 (Application Engine) Checkpoint 1: application data model (12 owner-only tables), database-enforced state machine, evidence-only submission records, duplicate/lock protection, core services and `/applications` dashboard; migration applied (live: 90 tables, advisors clean). Before that, 2026-09-26 — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-29** — Phase 8 (Application Engine) **built, checkpoints 1–12**: application data model and state machine, package → application, channel discovery with provenance, form discovery (Greenhouse API / browser worker), deterministic field mapping, question engine (local AI + claim audit), review/approval/application hash, isolated browser worker on the installed Edge with navigation guard, CAPTCHA/sign-in hand-over, evidence-only submission, uncertain state, manual checklist and email payload (`READY_TO_SEND`). Tested end to end against a controlled local fixture form (never a real company). Real Sarvam application prepared up to review — **not approved, nothing submitted**. Both Phase 8 migrations applied (live: 91 tables). Earlier the same day: Checkpoint 1. Before that, 2026-09-26 — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 8 — Application Engine: Checkpoint 1 (data model) done, awaiting inspection**                                                                                           |
+| Current phase       | **Phase 8 — Application Engine: built (checkpoints 1–12), awaiting your review of the real application**                                                                        |
 | Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
 | Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
-| Migrations          | 15 in the repo, all applied on JOBHUNTOS (latest `20261029000000_phase8_application_engine`)                                                                                    |
+| Migrations          | 16 in the repo, all applied on JOBHUNTOS (latest `20261030000000_phase8_execution`)                                                                                             |
 | Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
 | AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
@@ -32,11 +32,16 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 | 7 | Built | Communication Studio: emails + cover letters, AI drafting (`email.generate` / `cover_letter.generate`, Ollama by default), claim validation with provenance, quality engine, versions/compare/restore, approval gate, PDF/DOCX/TXT export, job + resume entry points, **Communication Package + Phase 8 handoff** (`docs/communication-studio.md`); no sending of any kind |
 
+| 8 | Built | Application Engine: package → application, channels with provenance, form inspection, mapping, question engine, review/approval hash, browser worker (installed Edge, `npm run worker:applications`), evidence-only submission, uncertain state, manual + email fallback (`docs/application-engine.md`); no real submission made |
+
 | AI | Complete | Provider registry, task registry + sensitivity, privacy routing, orchestrator (`runAiTask`) used by all 4 AI call sites, `/settings/ai`; real tests passed with `qwen3.5:9b` and `gemini-3.8-flash` |
 
 ## Database (JOBHUNTOS, verified live)
 
-- 90 tables (14 added by Phase 7, 12 by Phase 8), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- 91 tables (14 added by Phase 7, 13 by Phase 8), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- Phase 8 advisors re-checked live after `20261030000000_phase8_execution` (Supabase MCP): no new findings; the
+  remaining INFO/WARN items are the Better Auth tables without app policies (by design) and the platform
+  `rls_auto_enable` function (see below).
 - Supabase advisor lints (re-checked 2026-09-26 with read-only catalog queries — the Supabase MCP was not available in the session): security and performance findings **all resolved** by `20261015000000_advisor_fixes` (32 FK indexes, pinned trigger `search_path`, no multiple permissive policies); guarded by `tests/integration/advisors.test.ts`.
 - App role `jobhunt_app`: NOLOGIN, NOBYPASSRLS; every user-owned table has an owner policy
   `user_id = app_current_user_id()`. Shared catalog tables (jobs, companies, postings, requirement sets)
@@ -69,11 +74,11 @@ direct URLs are kept as comments in `.env` (backup: `.data/.env.before-pooler`).
 transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads are slower through the pooler
 (~10–15 s on dev for the communication workspace); switch back to the direct URLs when IPv6 works again.
 
-## Validation (2026-09-26, after Phase 7)
+## Validation (2026-09-29, after Phase 8)
 
 | Command                               | Result                                                                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run check`                       | pass — typecheck, lint, format, **546 tests passed, 3 skipped** (43 files)                                                                |
+| `npm run check`                       | pass — typecheck, lint, format, **all tests passed** (incl. Phase 8 browser tests with the installed Edge against the local fixture)      |
 | `npm run build`                       | pass                                                                                                                                      |
 | `REAL_AI=1 npx vitest run tests/real` | passed on the local machine (Ollama `qwen3.5:9b`, Gemini `gemini-3.8-flash`); skipped where no `.env`/providers exist (e.g. Claude Cloud) |
 
@@ -112,14 +117,28 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 - Stale behaviour is verified by automated tests (editing the approved email, revoking an approval,
   recomputing the match → `STALE`; tampered hash → `INVALID`); it was not triggered on the real package.
 
-## Phase 8 — Application Engine (in progress)
+## Phase 8 — Application Engine (built)
 
 - Checkpoint 1 done: `applications`, channels, attempts (worker leases), forms, fields, field mappings,
   questions, answers, approvals, submissions, evidence, events — owner-only RLS; DB triggers enforce the state
   machine, locked versions, immutable approvals/answers/submissions; CHECKs make a "submitted" state impossible
   without evidence. See `docs/application-engine.md`.
-- No application exists yet (none were created). No browser automation dependency is installed yet
-  (checkpoint 8). Automation default: human approval. No adapters are claimed yet.
+- Checkpoints 2–12 done: see `docs/application-engine.md` (flow, adapters with verification status, worker setup,
+  security, tests, limitations). New dependency: `playwright-core` (drives the **installed** Edge; no browser
+  download). Automation is off unless `APPLICATION_AUTOMATION_ENABLED=true`; default mode human approval.
+- Verified adapters: TEST_FIXTURE (automated browser tests), Greenhouse inspection via the official API (live,
+  read-only), Ashby inspection in the browser (live, read-only, Sarvam). **No adapter's fill/submit was verified on
+  a real employer form** — no false application was sent to test it.
+- Fixed while verifying live: under `tsx` (the worker), esbuild's `__name` helper broke the serialized in-page
+  inspection script → it is now serialized with a shim; stored field options were compared as objects in form
+  drift → fixed.
+- **Real application (owais, Sarvam "Frontend Engineer, Chanakya")** `01a0ee4e-57e8-719b-827e-d0028876525a`:
+  created from package `01a0dedf…` (exact versions locked) → channel ATS/Ashby (source verified, public API) →
+  robots.txt allows → browser inspection (read-only): 7 fields, and the form embeds a **CAPTCHA** (so submission
+  must be done by you) → all required fields mapped (name, email, phone, approved resume PDF), LinkedIn mapped,
+  GitHub needs review → optional "Why do you want to work at Sarvam AI?" drafted locally by Ollama
+  (1,027 chars, 6 facts + 3 sourced research claims, partially supported, **draft — not approved**) → readiness
+  READY, status READY. **Not approved, nothing submitted** — waiting for you.
 
 ## Known issues
 
@@ -135,4 +154,4 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 
 ## Next phase
 
-**Phase 8 — Checkpoint 2** (after inspection of checkpoint 1): create an application from a READY_FOR_APPLICATION communication package (package validation, version locking, stale/unapproved packages blocked, duplicate warning). See `docs/application-engine.md` §1.
+Review the real Sarvam application (`/applications/01a0ee4e-57e8-719b-827e-d0028876525a`), then decide whether to approve it and submit it yourself (the Ashby form has a CAPTCHA). After that: **Phase 9** per `docs/roadmap.md`.

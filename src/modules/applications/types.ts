@@ -63,6 +63,7 @@ export const CHANNEL_VERIFICATION = [
 ] as const;
 
 export const ATTEMPT_STATUSES = [
+  "QUEUED",
   "RUNNING",
   "PAUSED",
   "NEEDS_HUMAN_INPUT",
@@ -73,6 +74,7 @@ export const ATTEMPT_STATUSES = [
 ] as const;
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 export const ACTIVE_ATTEMPT_STATUSES: readonly AttemptStatus[] = [
+  "QUEUED",
   "RUNNING",
   "PAUSED",
   "NEEDS_HUMAN_INPUT",
@@ -292,3 +294,8 @@ export const APPLICATION_FILTERS = {
   { label: string; statuses: readonly ApplicationStatus[] | null }
 >;
 export type ApplicationFilter = keyof typeof APPLICATION_FILTERS;
+
+export const ATTEMPT_PHASES = ["INSPECT", "FILL", "FILL_AND_SUBMIT", "SUBMIT"] as const;
+export type AttemptPhase = (typeof ATTEMPT_PHASES)[number];
+export const CONTROL_COMMANDS = ["NONE", "PAUSE", "RESUME", "STOP"] as const;
+export type ControlCommand = (typeof CONTROL_COMMANDS)[number];
