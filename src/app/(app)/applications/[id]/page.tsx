@@ -310,7 +310,12 @@ export default async function ApplicationPage({ params }: PageProps<"/applicatio
                 below always works.
               </p>
             )}
-            <ExecutionPanel applicationId={app.id} initial={execution} />
+            {/* Keyed so a newly queued attempt (after an action) replaces the stale client state. */}
+            <ExecutionPanel
+              key={`${execution.attempt?.id ?? "none"}:${execution.attempt?.status ?? ""}`}
+              applicationId={app.id}
+              initial={execution}
+            />
             {status === "READY_TO_SUBMIT" &&
               adapter?.usesBrowser &&
               app.automationMode !== "MANUAL_ONLY" &&

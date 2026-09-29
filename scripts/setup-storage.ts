@@ -23,6 +23,8 @@ const options = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
+    // Application evidence screenshots (Phase 8), stored under {userId}/applications/…
+    "image/png",
   ],
 };
 
@@ -39,7 +41,7 @@ async function main() {
     const { error } = await supabase.storage.updateBucket(bucket, options);
     if (error) throw error;
     console.warn(
-      `Bucket "${bucket}" exists — enforced private access, ${maxBytes} byte limit and PDF/DOCX/TXT only.`,
+      `Bucket "${bucket}" exists — enforced private access, ${maxBytes} byte limit and PDF/DOCX/TXT/PNG only.`,
     );
   } else {
     const { error } = await supabase.storage.createBucket(bucket, options);

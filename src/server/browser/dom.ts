@@ -218,8 +218,14 @@ export function detectSubmissionOutcome(input: {
 }):
   | { outcome: "CONFIRMED"; confirmationId: string | null; message: string }
   | { outcome: "REJECTED"; message: string }
+  | { outcome: "BLOCKED"; message: string }
   | { outcome: "UNKNOWN" } {
   const text = input.text.replace(/\s+/g, " ");
+  // Anti-bot / spam refusal: the site did not accept the application. Automation stops here.
+  const blocked = text.match(
+    /(flagged as (possible |potential )?spam|suspected (spam|bot|automated)|(couldn[’']?t|could not|unable to) submit your application|unusual (activity|traffic)|verify (that )?you('re| are) (a )?human)[^.!]*[.!]?/i,
+  );
+  if (blocked) return { outcome: "BLOCKED", message: blocked[0].slice(0, 300) };
   const success = text.match(
     /(thank you for (applying|your application)|thanks for applying|your application (has been|was) (submitted|received)|application (submitted|received)( successfully)?|we('ve| have) received your application|successfully applied)[^.!]*[.!]?/i,
   );

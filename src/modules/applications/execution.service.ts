@@ -999,6 +999,12 @@ export async function runAttempt(claim: { attemptId: string; userId: string }, d
         if (!env.APPLICATION_BROWSER_HEADLESS) {
           // The human may submit in the visible window: observe (never click) and record with evidence.
           const seen = await session.observeManualSubmission(1, async () => false);
+          if (seen?.outcome === "BLOCKED") {
+            // The site refused the (human) submission as spam/bot: never retried automatically.
+            const action = `The site blocked the submission as possible spam ("${seen.message}"). Submit from your own normal browser using the checklist, then click "I submitted it".`;
+            await applicationNeedsHuman(actor, app.id, action, attempt.id);
+            return await finishAttempt(actor, attempt.id, "FAILED", "ANTI_BOT_BLOCKED", action);
+          }
           if (seen) {
             const sub = await beginSubmission(actor, app.id, attempt.id);
             submissionId = sub.id;
@@ -1089,6 +1095,20 @@ export async function runAttempt(claim: { attemptId: string; userId: string }, d
       sub.id,
       observed.outcome === "REJECTED" ? "FAILURE_STATE" : "SCREENSHOT",
     ).catch(() => null);
+    if (observed.outcome === "BLOCKED") {
+      await recordSubmissionOutcome(actor, sub.id, {
+        result: "FAILED",
+        errorCode: "ANTI_BOT_BLOCKED",
+        reason: observed.message,
+      });
+      return await finishAttempt(
+        actor,
+        attempt.id,
+        "FAILED",
+        "ANTI_BOT_BLOCKED",
+        `The site blocked the submission as possible spam: ${observed.message} Submit from your own browser using the checklist.`,
+      );
+    }
     if (observed.outcome === "REJECTED") {
       await recordSubmissionOutcome(actor, sub.id, {
         result: "FAILED",

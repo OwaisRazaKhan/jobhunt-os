@@ -208,7 +208,8 @@ export class BrowserSession {
           text: state.text,
           invalidFields: 0,
         });
-        if (outcome.outcome === "CONFIRMED") return { ...outcome, url: state.url };
+        if (outcome.outcome === "CONFIRMED" || outcome.outcome === "BLOCKED")
+          return { ...outcome, url: state.url };
       } catch {
         // navigation in progress
       }

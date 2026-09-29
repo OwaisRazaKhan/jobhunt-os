@@ -334,5 +334,14 @@ describe("browser safety", () => {
         invalidFields: 0,
       }).outcome,
     ).toBe("UNKNOWN");
+    // Real Ashby anti-spam refusal: never treated as success, never retried around.
+    expect(
+      detectSubmissionOutcome({
+        url: "https://x/apply",
+        previousUrl: "https://x/apply",
+        text: "We couldn't submit your application. Your application submission was flagged as possible spam.",
+        invalidFields: 0,
+      }).outcome,
+    ).toBe("BLOCKED");
   });
 });

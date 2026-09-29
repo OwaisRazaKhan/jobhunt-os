@@ -316,7 +316,9 @@ export function ExecutionPanel({
   const waitingSubmit =
     a.status === "NEEDS_HUMAN_INPUT" &&
     a.phase === "FILL" &&
-    state.app.status === "READY_TO_SUBMIT";
+    state.app.status === "READY_TO_SUBMIT" &&
+    // On a CAPTCHA-protected form the worker never clicks submit — the human submits in the browser.
+    !a.humanAction?.includes("CAPTCHA");
   return (
     <div className="flex flex-col gap-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">

@@ -8,12 +8,21 @@
  */
 import { startFixtureServer } from "../src/modules/applications/fixture/server";
 
-const port = Number(process.env.APPLICATION_FIXTURE_PORT) || 4010;
-const fixture = await startFixtureServer(port);
-console.warn(
-  `TEST FIXTURE application form on ${fixture.origin}/apply?variant=basic (Ctrl+C to stop)`,
-);
-setInterval(() => {
-  if (fixture.submissions.length)
-    console.warn(`fixture submissions so far: ${fixture.submissions.map((s) => s.id).join(", ")}`);
-}, 30_000);
+async function main() {
+  const port = Number(process.env.APPLICATION_FIXTURE_PORT) || 4010;
+  const fixture = await startFixtureServer(port);
+  console.warn(
+    `TEST FIXTURE application form on ${fixture.origin}/apply?variant=basic (Ctrl+C to stop)`,
+  );
+  setInterval(() => {
+    if (fixture.submissions.length)
+      console.warn(
+        `fixture submissions so far: ${fixture.submissions.map((s) => s.id).join(", ")}`,
+      );
+  }, 30_000);
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
