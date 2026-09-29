@@ -159,6 +159,19 @@ model User {
   communicationPackageAssets CommunicationPackageAsset[]
   communicationPackageChecks CommunicationPackageCheck[]
 
+  applications             Application[]
+  applicationChannels      ApplicationChannel[]
+  applicationAttempts      ApplicationAttempt[]
+  applicationForms         ApplicationForm[]
+  applicationFields        ApplicationField[]
+  applicationFieldMappings ApplicationFieldMapping[]
+  applicationQuestions     ApplicationQuestion[]
+  applicationAnswers       ApplicationAnswer[]
+  applicationApprovals     ApplicationApproval[]
+  applicationSubmissions   ApplicationSubmission[]
+  applicationEvidence      ApplicationEvidence[]
+  applicationEvents        ApplicationEvent[]
+
   @@map("users")
 }
 
@@ -264,9 +277,10 @@ model CandidateProfile {
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  currentCountry Country?   @relation(fields: [currentCountryCode], references: [code])
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentCountry Country?      @relation(fields: [currentCountryCode], references: [code])
   jobMatches     JobMatch[]
+  applications   Application[]
 
   /// FK index (Supabase advisor: unindexed_foreign_keys)
   @@index([currentCountryCode])
@@ -841,6 +855,8 @@ model Company {
   recipientContexts     RecipientContext[]
   communicationPackages CommunicationPackage[]
 
+  applications Application[]
+
   @@map("companies")
 }
 
@@ -928,6 +944,7 @@ model Job {
   resumeChecks          ResumeCheck[]
   communications        Communication[]
   communicationPackages CommunicationPackage[]
+  applications          Application[]
 
   @@index([createdByUserId, deletedAt, createdAt(sort: Desc)])
   @@index([visibility, status])
@@ -2469,6 +2486,7 @@ model CommunicationPackage {
   nextPackages     CommunicationPackage[]      @relation("PackageLineage")
   assets           CommunicationPackageAsset[]
   checks           CommunicationPackageCheck[]
+  applications     Application[]
 
   @@index([userId, status, updatedAt(sort: Desc)])
   @@index([jobId])
@@ -2525,4 +2543,391 @@ model CommunicationPackageCheck {
   @@index([packageId, createdAt(sort: Desc)])
   @@index([userId])
   @@map("communication_package_checks")
+}
+
+/// One candidate's application for one job (Phase 8). Consumes a READY_FOR_APPLICATION
+/// communication package; locks the exact versions in `snapshot`. Never deleted by the app.
+model Application {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  candidateId            String    @map("candidate_id") @db.Uuid
+  jobId                  String    @map("job_id") @db.Uuid
+  companyId              String?   @map("company_id") @db.Uuid
+  communicationPackageId String    @map("communication_package_id") @db.Uuid
+  /// Current primary application channel
+  channelId              String?   @unique @map("channel_id") @db.Uuid
+  /// DRAFT | READY | IN_PROGRESS | NEEDS_HUMAN_INPUT | READY_TO_SUBMIT | SUBMITTING | SUBMITTED |
+  /// SUBMISSION_CONFIRMED | SUBMISSION_UNCERTAIN | FAILED | BLOCKED | CANCELLED | WITHDRAWN | ARCHIVED
+  status                 String    @default("DRAFT")
+  /// MANUAL_ONLY | HUMAN_APPROVAL | AUTO_FILL_REVIEW_SUBMIT
+  automationMode         String    @default("HUMAN_APPROVAL") @map("automation_mode")
+  /// NOT_READY | READY | NEEDS_USER_INPUT | BLOCKED | STALE
+  readiness              String    @default("NOT_READY")
+  currentAttempt         Int       @default(0) @map("current_attempt")
+  /// Exact versions + hashes consumed from the package (candidate, job, match, research, assets)
+  snapshot               Json      @default("{}")
+  packageIntegrityHash   String    @map("package_integrity_hash") @db.Char(64)
+  preparedAt             DateTime? @map("prepared_at") @db.Timestamptz(3)
+  /// Hash of the current normalized application state (fields, answers, files)
+  applicationHash        String?   @map("application_hash") @db.Char(64)
+  applicationUrl         String?   @map("application_url")
+  jobUrl                 String?   @map("job_url")
+  deadlineAt             DateTime? @map("deadline_at") @db.Timestamptz(3)
+  submittedAt            DateTime? @map("submitted_at") @db.Timestamptz(3)
+  confirmedAt            DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  /// CONFIRMATION_PAGE | CONFIRMATION_ID | SUCCESS_MESSAGE | EXTERNAL_APPLICATION_ID | HTTP_API_SUCCESS | USER_CONFIRMED
+  confirmationSource     String?   @map("confirmation_source")
+  externalApplicationId  String?   @map("external_application_id")
+  confirmationUrl        String?   @map("confirmation_url")
+  blockedReason          String?   @map("blocked_reason")
+  archivedAt             DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user                 User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidate            CandidateProfile        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  job                  Job                     @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  company              Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  communicationPackage CommunicationPackage    @relation(fields: [communicationPackageId], references: [id], onDelete: Restrict)
+  channel              ApplicationChannel?     @relation("ApplicationPrimaryChannel", fields: [channelId], references: [id], onDelete: SetNull)
+  channels             ApplicationChannel[]    @relation("ApplicationChannels")
+  attempts             ApplicationAttempt[]
+  forms                ApplicationForm[]
+  questions            ApplicationQuestion[]
+  approvals            ApplicationApproval[]
+  submissions          ApplicationSubmission[]
+  evidence             ApplicationEvidence[]
+  events               ApplicationEvent[]
+
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@index([candidateId])
+  @@index([jobId])
+  @@index([companyId])
+  @@index([communicationPackageId])
+  @@map("applications")
+}
+
+/// How the job is applied to, with provenance. Nothing inferred is ever marked verified.
+model ApplicationChannel {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  applicationId      String    @map("application_id") @db.Uuid
+  /// ATS | CAREERS_PAGE | APPLICATION_FORM | EMAIL_APPLICATION | EXTERNAL_PORTAL | MANUAL_APPLICATION | UNKNOWN
+  channelType        String    @map("channel_type")
+  /// GREENHOUSE | LEVER | ASHBY | OTHER | NONE
+  provider           String    @default("NONE")
+  url                String?
+  email              String?
+  /// JOB_RECORD | JOB_POST | ATS_API | OFFICIAL_CAREERS_PAGE | OFFICIAL_COMPANY_PAGE | USER_PROVIDED | UNKNOWN
+  source             String
+  sourceUrl          String?   @map("source_url")
+  /// SOURCE_VERIFIED | UNVERIFIED | STALE | INVALID | INFERRED
+  verificationStatus String    @default("UNVERIFIED") @map("verification_status")
+  /// HIGH | MEDIUM | LOW
+  confidence         String    @default("MEDIUM")
+  evidenceExcerpt    String?   @map("evidence_excerpt")
+  isPrimary          Boolean   @default(false) @map("is_primary")
+  discoveredAt       DateTime  @default(now()) @map("discovered_at") @db.Timestamptz(3)
+  lastVerifiedAt     DateTime? @map("last_verified_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application       @relation("ApplicationChannels", fields: [applicationId], references: [id], onDelete: Cascade)
+  primaryOf   Application?      @relation("ApplicationPrimaryChannel")
+  forms       ApplicationForm[]
+
+  @@index([applicationId])
+  @@index([userId])
+  @@map("application_channels")
+}
+
+/// One execution attempt (the worker's unit of work). Leases prevent concurrent execution.
+model ApplicationAttempt {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  applicationId  String    @map("application_id") @db.Uuid
+  attemptNumber  Int       @map("attempt_number")
+  executionId    String    @unique @map("execution_id") @db.Uuid
+  /// RUNNING | PAUSED | NEEDS_HUMAN_INPUT | SUCCEEDED | FAILED | CANCELLED | UNCERTAIN
+  status         String    @default("RUNNING")
+  mode           String
+  adapter        String
+  adapterVersion String    @map("adapter_version")
+  leaseOwner     String?   @map("lease_owner")
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  startedAt      DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(3)
+  errorCode      String?   @map("error_code")
+  errorMessage   String?   @map("error_message")
+  /// Sanitized step log: [{ step, status, at, detail }] — never sessions or secrets
+  steps          Json      @default("[]")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application             @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  submissions ApplicationSubmission[]
+  evidence    ApplicationEvidence[]
+  events      ApplicationEvent[]
+
+  @@unique([applicationId, attemptNumber])
+  @@index([userId])
+  @@map("application_attempts")
+}
+
+/// An inspected application form (public structure only) and its fingerprint.
+model ApplicationForm {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  applicationId   String   @map("application_id") @db.Uuid
+  channelId       String?  @map("channel_id") @db.Uuid
+  url             String
+  provider        String
+  adapter         String
+  adapterVersion  String   @map("adapter_version")
+  formFingerprint String   @map("form_fingerprint") @db.Char(64)
+  schemaVersion   Int      @default(1) @map("schema_version")
+  fieldMapVersion Int      @default(0) @map("field_map_version")
+  /// CURRENT | SUPERSEDED | CHANGED
+  status          String   @default("CURRENT")
+  discoveredAt    DateTime @default(now()) @map("discovered_at") @db.Timestamptz(3)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  channel     ApplicationChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  fields      ApplicationField[]
+
+  @@index([applicationId, discoveredAt(sort: Desc)])
+  @@index([channelId])
+  @@index([userId])
+  @@map("application_forms")
+}
+
+/// A field of an inspected form (immutable snapshot of the public form structure).
+model ApplicationField {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  formId           String   @map("form_id") @db.Uuid
+  externalFieldId  String   @map("external_field_id")
+  label            String
+  /// TEXT | TEXTAREA | EMAIL | PHONE | URL | NUMBER | DATE | SELECT | MULTISELECT | RADIO | CHECKBOX |
+  /// FILE | ADDRESS | LOCATION | YES_NO | CUSTOM | UNKNOWN
+  fieldType        String   @map("field_type")
+  required         Boolean  @default(false)
+  options          Json     @default("[]")
+  maxLength        Int?     @map("max_length")
+  pageUrl          String?  @map("page_url")
+  position         Int      @default(0)
+  /// FACTUAL | EXPERIENCE | PREFERENCE | MOTIVATION | BEHAVIORAL | TECHNICAL | LEGAL | DEMOGRAPHIC | CONSENT | FILE | OTHER
+  classification   String   @default("OTHER")
+  fieldFingerprint String   @map("field_fingerprint") @db.Char(64)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  form      ApplicationForm           @relation(fields: [formId], references: [id], onDelete: Cascade)
+  mappings  ApplicationFieldMapping[]
+  questions ApplicationQuestion[]
+
+  @@unique([formId, externalFieldId])
+  @@index([userId])
+  @@map("application_fields")
+}
+
+/// Versioned value mapping for a field (private, user-scoped; never a global template).
+model ApplicationFieldMapping {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  fieldId     String   @map("field_id") @db.Uuid
+  version     Int
+  isCurrent   Boolean  @default(true) @map("is_current")
+  /// CANDIDATE_FACT | CANDIDATE_PROFILE | RESUME | COVER_LETTER | COMMUNICATION_PACKAGE | GENERATED_ANSWER | USER_INPUT | UNKNOWN
+  mappingType String   @map("mapping_type")
+  sourceRef   String?  @map("source_ref")
+  value       Json?
+  /// EXACT | HIGH | MEDIUM | LOW | UNKNOWN
+  confidence  String   @default("UNKNOWN")
+  /// AUTO_FILL | REQUIRE_REVIEW | REQUIRE_USER_INPUT | BLOCK
+  policy      String   @default("REQUIRE_REVIEW")
+  /// MAPPED | NEEDS_REVIEW | NEEDS_USER_INPUT | BLOCKED | CONFIRMED | OVERRIDDEN
+  status      String   @default("NEEDS_REVIEW")
+  explanation String?
+  /// SYSTEM | AI | USER
+  createdBy   String   @default("SYSTEM") @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  field ApplicationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([fieldId, version])
+  @@index([userId])
+  @@map("application_field_mappings")
+}
+
+/// A custom question on the application (e.g. "Why do you want this role?").
+model ApplicationQuestion {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  applicationId  String   @map("application_id") @db.Uuid
+  fieldId        String?  @map("field_id") @db.Uuid
+  questionText   String   @map("question_text")
+  /// CANDIDATE_FACT | EXPERIENCE | PROJECT | MOTIVATION | COMPANY_INTEREST | ROLE_INTEREST | BEHAVIORAL |
+  /// TECHNICAL | PREFERENCES | AVAILABILITY | OTHER
+  answerType     String   @default("OTHER") @map("answer_type")
+  /// FACTUAL | EXPERIENCE | PREFERENCE | MOTIVATION | BEHAVIORAL | TECHNICAL | LEGAL | DEMOGRAPHIC | OTHER
+  classification String   @default("OTHER")
+  required       Boolean  @default(false)
+  maxLength      Int?     @map("max_length")
+  /// FORM | USER
+  source         String   @default("FORM")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  field       ApplicationField?   @relation(fields: [fieldId], references: [id], onDelete: SetNull)
+  answers     ApplicationAnswer[]
+
+  @@index([applicationId])
+  @@index([fieldId])
+  @@index([userId])
+  @@map("application_questions")
+}
+
+/// Versioned answer to a question. Approved answers are immutable (trigger).
+model ApplicationAnswer {
+  id                         String    @id @default(uuid(7)) @db.Uuid
+  userId                     String    @map("user_id") @db.Uuid
+  questionId                 String    @map("question_id") @db.Uuid
+  versionNumber              Int       @map("version_number")
+  isCurrent                  Boolean   @default(true) @map("is_current")
+  answerText                 String    @map("answer_text")
+  contentHash                String    @map("content_hash") @db.Char(64)
+  /// AI_GENERATED | AI_ASSISTED | USER_AUTHORED | PROFILE_DERIVED
+  contentSource              String    @map("content_source")
+  supportingFactRefs         String[]  @default([]) @map("supporting_fact_refs")
+  supportingResearchClaimIds String[]  @default([]) @map("supporting_research_claim_ids")
+  warnings                   Json      @default("[]")
+  /// SUPPORTED | PARTIALLY_SUPPORTED | UNSUPPORTED | NEEDS_USER_INPUT | NOT_VALIDATED
+  validationStatus           String    @default("NOT_VALIDATED") @map("validation_status")
+  /// DRAFT | APPROVED | REJECTED | SUPERSEDED
+  approvalStatus             String    @default("DRAFT") @map("approval_status")
+  approvedAt                 DateTime? @map("approved_at") @db.Timestamptz(3)
+  generation                 Json      @default("{}")
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question ApplicationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, versionNumber])
+  @@index([userId])
+  @@map("application_answers")
+}
+
+/// Human approval of the exact normalized application state (hash). Immutable; revocable.
+model ApplicationApproval {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  applicationId   String    @map("application_id") @db.Uuid
+  applicationHash String    @map("application_hash") @db.Char(64)
+  /// Normalized approved state: field values/refs, answer hashes, file hashes, versions
+  payload         Json      @default("{}")
+  approvedAt      DateTime  @default(now()) @map("approved_at") @db.Timestamptz(3)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokeReason    String?   @map("revoke_reason")
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([userId])
+  @@map("application_approvals")
+}
+
+/// A submission (or email delivery) — success statuses require recorded evidence (DB CHECK).
+model ApplicationSubmission {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
+  applicationId         String    @map("application_id") @db.Uuid
+  attemptId             String?   @map("attempt_id") @db.Uuid
+  channelType           String    @map("channel_type")
+  /// SUBMITTING | SUBMITTED | SUBMISSION_CONFIRMED | SUBMISSION_UNCERTAIN | FAILED |
+  /// READY_TO_SEND | SENDING | SENT | DELIVERY_UNKNOWN
+  status                String
+  applicationHash       String    @map("application_hash") @db.Char(64)
+  /// Idempotency key for this submission (application + approved hash)
+  submissionFingerprint String    @map("submission_fingerprint") @db.Char(64)
+  startedAt             DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  submittedAt           DateTime? @map("submitted_at") @db.Timestamptz(3)
+  externalApplicationId String?   @map("external_application_id")
+  confirmationUrl       String?   @map("confirmation_url")
+  confirmationText      String?   @map("confirmation_text")
+  confirmationSource    String?   @map("confirmation_source")
+  errorCode             String?   @map("error_code")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  attempt     ApplicationAttempt?   @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  evidence    ApplicationEvidence[]
+
+  @@index([applicationId, startedAt(sort: Desc)])
+  @@index([attemptId])
+  @@index([userId])
+  @@map("application_submissions")
+}
+
+/// Evidence captured for an application (confirmation text/id, screenshots in private storage).
+model ApplicationEvidence {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  applicationId String    @map("application_id") @db.Uuid
+  submissionId  String?   @map("submission_id") @db.Uuid
+  attemptId     String?   @map("attempt_id") @db.Uuid
+  /// SCREENSHOT | CONFIRMATION_PAGE | CONFIRMATION_ID | SUCCESS_MESSAGE | EXTERNAL_APPLICATION_ID |
+  /// HTTP_API_SUCCESS | USER_CONFIRMED | FAILURE_STATE | REVIEW_STATE
+  evidenceType  String    @map("evidence_type")
+  /// AUTOMATED | USER
+  source        String
+  storagePath   String?   @map("storage_path")
+  textExcerpt   String?   @map("text_excerpt")
+  metadata      Json      @default("{}")
+  capturedAt    DateTime  @default(now()) @map("captured_at") @db.Timestamptz(3)
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
+
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application            @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  submission  ApplicationSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  attempt     ApplicationAttempt?    @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+  @@index([submissionId])
+  @@index([attemptId])
+  @@index([userId])
+  @@map("application_evidence")
+}
+
+/// Append-only application timeline (real events only; feeds Phase 9/11/12 later).
+model ApplicationEvent {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  applicationId String   @map("application_id") @db.Uuid
+  attemptId     String?  @map("attempt_id") @db.Uuid
+  eventType     String   @map("event_type")
+  /// Sanitized metadata (no candidate content, sessions or secrets)
+  payload       Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  attempt     ApplicationAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, createdAt])
+  @@index([attemptId])
+  @@index([userId])
+  @@map("application_events")
 }

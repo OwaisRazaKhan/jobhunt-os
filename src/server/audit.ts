@@ -140,6 +140,15 @@ export type AuditAction =
   | "communication_package_invalid"
   | "communication_package_archived"
   | "communication_package_handoff"
+  | "application_created"
+  | "application_status_changed"
+  | "application_policy_changed"
+  | "application_attempt_started"
+  | "application_submission_started"
+  | "application_submitted"
+  | "application_submission_uncertain"
+  | "application_submission_failed"
+  | "application_user_confirmed"
   | "signature_preset_saved"
   | "signature_preset_deleted";
 

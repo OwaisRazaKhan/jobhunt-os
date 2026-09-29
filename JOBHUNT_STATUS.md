@@ -5,16 +5,16 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-26** — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-29** — Phase 8 (Application Engine) Checkpoint 1: application data model (12 owner-only tables), database-enforced state machine, evidence-only submission records, duplicate/lock protection, core services and `/applications` dashboard; migration applied (live: 90 tables, advisors clean). Before that, 2026-09-26 — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 7 — Communication Studio: built and used end to end on real data** (Phase 6 built and used on real data)                                                                |
+| Current phase       | **Phase 8 — Application Engine: Checkpoint 1 (data model) done, awaiting inspection**                                                                                           |
 | Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
 | Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
-| Migrations          | 14 in the repo, all applied on JOBHUNTOS (latest `20261025000000_phase7_communication_packages`)                                                                                |
+| Migrations          | 15 in the repo, all applied on JOBHUNTOS (latest `20261029000000_phase8_application_engine`)                                                                                    |
 | Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
 | AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
@@ -36,7 +36,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Database (JOBHUNTOS, verified live)
 
-- 78 tables (14 added by Phase 7: 9 studio + 5 package/recipient/preference), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- 90 tables (14 added by Phase 7, 12 by Phase 8), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
 - Supabase advisor lints (re-checked 2026-09-26 with read-only catalog queries — the Supabase MCP was not available in the session): security and performance findings **all resolved** by `20261015000000_advisor_fixes` (32 FK indexes, pinned trigger `search_path`, no multiple permissive policies); guarded by `tests/integration/advisors.test.ts`.
 - App role `jobhunt_app`: NOLOGIN, NOBYPASSRLS; every user-owned table has an owner policy
   `user_id = app_current_user_id()`. Shared catalog tables (jobs, companies, postings, requirement sets)
@@ -112,6 +112,15 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 - Stale behaviour is verified by automated tests (editing the approved email, revoking an approval,
   recomputing the match → `STALE`; tampered hash → `INVALID`); it was not triggered on the real package.
 
+## Phase 8 — Application Engine (in progress)
+
+- Checkpoint 1 done: `applications`, channels, attempts (worker leases), forms, fields, field mappings,
+  questions, answers, approvals, submissions, evidence, events — owner-only RLS; DB triggers enforce the state
+  machine, locked versions, immutable approvals/answers/submissions; CHECKs make a "submitted" state impossible
+  without evidence. See `docs/application-engine.md`.
+- No application exists yet (none were created). No browser automation dependency is installed yet
+  (checkpoint 8). Automation default: human approval. No adapters are claimed yet.
+
 ## Known issues
 
 - **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and
@@ -126,4 +135,4 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 
 ## Next phase
 
-**Phase 8 — Application System** (after Phase 7 approval): applications, state machine, approvals, board/timeline, manual "I submitted" tracking. It consumes READY_FOR_APPLICATION communication packages via `getCommunicationPackageForApplication` (`docs/communication-studio.md` §13.6). No automated submission or sending.
+**Phase 8 — Checkpoint 2** (after inspection of checkpoint 1): create an application from a READY_FOR_APPLICATION communication package (package validation, version locking, stale/unapproved packages blocked, duplicate warning). See `docs/application-engine.md` §1.

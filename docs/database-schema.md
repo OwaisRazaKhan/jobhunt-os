@@ -495,6 +495,12 @@ Status is the only mutable field on a version; content changes create a new vers
 
 ### 3.10 Applications (P8)
 
+> **Implemented in Phase 8** as the Application Engine tables (`applications`, `application_channels`,
+> `application_attempts`, `application_forms`, `application_fields`, `application_field_mappings`,
+> `application_questions`, `application_answers`, `application_approvals`, `application_submissions`,
+> `application_evidence`, `application_events`) — see [application-engine.md](application-engine.md) §3.
+> The planning notes below are kept for history; `outbound_actions` / generic `approvals` were not built.
+
 **applications** — SD — the user's pipeline record for one job
 
 | Column                       | Type                                              | Notes                                                                                         |

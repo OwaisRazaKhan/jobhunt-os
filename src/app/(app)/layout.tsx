@@ -12,6 +12,7 @@ import {
   Plug,
   Radar,
   ScrollText,
+  Send,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -106,6 +107,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </NavLink>
           <NavLink href="/communication-packages">
             <Package className="size-4" aria-hidden /> Packages
+          </NavLink>
+          <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
+            Apply
+          </p>
+          <NavLink href="/applications">
+            <Send className="size-4" aria-hidden /> Applications
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System
