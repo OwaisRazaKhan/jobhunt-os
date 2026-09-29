@@ -13,6 +13,7 @@ import {
   Radar,
   ScrollText,
   Send,
+  Workflow,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -113,6 +114,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </p>
           <NavLink href="/applications">
             <Send className="size-4" aria-hidden /> Applications
+          </NavLink>
+          <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
+            Automate
+          </p>
+          <NavLink href="/workflows">
+            <Workflow className="size-4" aria-hidden /> Workflows
           </NavLink>
           <p className="text-fg-subtle hidden px-2 pt-4 pb-1 font-mono text-[10px] tracking-wider uppercase md:block">
             System

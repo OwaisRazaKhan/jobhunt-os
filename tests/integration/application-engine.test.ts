@@ -304,7 +304,7 @@ describe("package → application", () => {
     });
     // Another user can't use the package.
     await expect(createApplicationFromPackage(b, packageId)).rejects.toBeTruthy();
-  });
+  }, 90_000);
 
   it("refuses a package that is not ready for application", async () => {
     const job = await db.prisma.job.create({

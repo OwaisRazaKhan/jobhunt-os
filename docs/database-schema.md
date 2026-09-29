@@ -563,6 +563,8 @@ An approval is **invalidated** automatically if any referenced content hash chan
 
 ### 3.13 Workflows (P9)
 
+> **Built in Phase 9 (checkpoint 1)** as `workflows` + immutable `workflow_versions` (migration `20261101000000_phase9_workflows`) — see [workflow-engine.md](workflow-engine.md) §2. Execution tables follow in checkpoint 7.
+
 **workflows** — SD
 `user_id`, `name`, `description`, `status` (`DRAFT`,`ACTIVE`,`PAUSED`,`ARCHIVED`), `active_version_id null FK`, `draft_definition jsonb` (autosaved editor state), `version int`.
 

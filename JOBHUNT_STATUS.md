@@ -5,16 +5,16 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Last synchronized
 
-**2026-09-29** — Phase 8 (Application Engine) **built, checkpoints 1–12**: application data model and state machine, package → application, channel discovery with provenance, form discovery (Greenhouse API / browser worker), deterministic field mapping, question engine (local AI + claim audit), review/approval/application hash, isolated browser worker on the installed Edge with navigation guard, CAPTCHA/sign-in hand-over, evidence-only submission, uncertain state, manual checklist and email payload (`READY_TO_SEND`). Tested end to end against a controlled local fixture form (never a real company). Real Sarvam application prepared up to review — **not approved, nothing submitted**. Both Phase 8 migrations applied (live: 91 tables). Earlier the same day: Checkpoint 1. Before that, 2026-09-26 — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
+**2026-09-30** — Phase 9 (Workflow Builder) **Checkpoint 1**: workflow data model (`workflows` + immutable `workflow_versions`, owner-only RLS, DB-enforced valid activation), definition schema, versioned node catalog (20 node types, typed ports, strict configs, side-effect + retry-safety classes), graph validator (incl. approval-before-external-submission), draft autosave with optimistic lock, versions, activate/archive/duplicate, safe export/import, `/workflows` + detail page. Migration applied (live: 93 tables). Also: first real application run on the second account (Sarvam Growth Marketing Intern) — form filled correctly, **Ashby flagged the automated submission as possible spam**; nothing recorded as submitted; the candidate submits manually. Fixes from that run are committed (worker script startup, anti-bot refusal detection, CAPTCHA UI, PNG evidence storage setup). Before that, 2026-09-29 — Phase 8 (Application Engine) **built, checkpoints 1–12**: application data model and state machine, package → application, channel discovery with provenance, form discovery (Greenhouse API / browser worker), deterministic field mapping, question engine (local AI + claim audit), review/approval/application hash, isolated browser worker on the installed Edge with navigation guard, CAPTCHA/sign-in hand-over, evidence-only submission, uncertain state, manual checklist and email payload (`READY_TO_SEND`). Tested end to end against a controlled local fixture form (never a real company). Real Sarvam application prepared up to review — **not approved, nothing submitted**. Both Phase 8 migrations applied (live: 91 tables). Earlier the same day: Checkpoint 1. Before that, 2026-09-26 — Phase 7 addition: **Communication Package** (exact approved asset versions per job, deterministic readiness, stale detection, integrity hash, `READY_FOR_APPLICATION` = prepared not submitted), recipient contexts with provenance, communication preferences, strategy metadata and the Phase 8 handoff service; a real package for the Sarvam job is ready for application. Before that: Phase 7 (Communication Studio) built, checkpoints 1–9: editor, AI drafting through the orchestrator, claim validation, quality checks, approval, PDF/DOCX/TXT export, job/resume integration; real email + cover letter drafted for the Sarvam job, approved by the candidate and exported (nothing sent). Database connection switched to the IPv4 session pooler (see Environment). Earlier: AI provider/orchestration layer complete (Ollama + optional Gemini, privacy routing, `/settings/ai`); lint fixed and full suite green. Earlier: Phase 6 (Resume Studio) built and migrated.
 
 | Item                | State                                                                                                                                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current phase       | **Phase 8 — Application Engine: built (checkpoints 1–12), awaiting your review of the real application**                                                                        |
+| Current phase       | **Phase 9 — Workflow Builder: Checkpoint 1 (data model) done, awaiting inspection**                                                                                             |
 | Completed phases    | 0, 1, 2, 3, 4, 5                                                                                                                                                                |
 | Partially completed | none                                                                                                                                                                            |
 | Git                 | `main` = `origin/main`; Cloud branch `claude/jobhunt-os-phase2-iihr1l` points at the same commit                                                                                |
 | Supabase project    | **JOBHUNTOS**, ref `vrgtvlwxxgfseniqtgmx` (only environment; direct connection on :5432)                                                                                        |
-| Migrations          | 16 in the repo, all applied on JOBHUNTOS (latest `20261030000000_phase8_execution`)                                                                                             |
+| Migrations          | 17 in the repo, all applied on JOBHUNTOS (latest `20261101000000_phase9_workflows`)                                                                                             |
 | Schema drift        | none — the only Prisma diff is `jobs.search_vector` (generated tsvector + GIN index, intentionally hand-written SQL, modelled as `Unsupported`)                                 |
 | AI                  | Orchestrated: Ollama `qwen3.5:9b` (local, default) + optional Gemini `gemini-3.8-flash`; private data local unless operator switch + user opt-in (`docs/ai-architecture.md` §0) |
 
@@ -38,7 +38,7 @@ Plan and phase definitions: [docs/roadmap.md](docs/roadmap.md). Technical detail
 
 ## Database (JOBHUNTOS, verified live)
 
-- 91 tables (14 added by Phase 7, 13 by Phase 8), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
+- 93 tables (14 added by Phase 7, 13 by Phase 8, 2 so far by Phase 9), **RLS enabled on all**; 0 grants to `anon` / `authenticated`.
 - Phase 8 advisors re-checked live after `20261030000000_phase8_execution` (Supabase MCP): no new findings; the
   remaining INFO/WARN items are the Better Auth tables without app policies (by design) and the platform
   `rls_auto_enable` function (see below).
@@ -140,6 +140,14 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
   (1,027 chars, 6 facts + 3 sourced research claims, partially supported, **draft — not approved**) → readiness
   READY, status READY. **Not approved, nothing submitted** — waiting for you.
 
+## Phase 9 — Workflow Builder (in progress)
+
+- Checkpoint 1 done: see `docs/workflow-engine.md`. Workflows are persisted and versioned; versions are immutable
+  and only VALID ones can be activated (database trigger); runs (checkpoint 7) will pin a version.
+- The node catalog describes 20 node types; **no node is executable yet** — executors are wired to the real
+  Phase 2–8 services in checkpoints 3–6, the engine in checkpoint 7. The canvas is checkpoint 2.
+- Local test account (for manual UI testing): credentials in `.data/test-account.local.md` (git-ignored).
+
 ## Known issues
 
 - **Windows line endings (fixed in re-sync):** `core.autocrlf=true` checked files out as CRLF and
@@ -154,4 +162,4 @@ transactions, `set_config` and `SET LOCAL ROLE` the app relies on. Page loads ar
 
 ## Next phase
 
-Review the real Sarvam application (`/applications/01a0ee4e-57e8-719b-827e-d0028876525a`), then decide whether to approve it and submit it yourself (the Ashby form has a CAPTCHA). After that: **Phase 9** per `docs/roadmap.md`.
+**Phase 9 — Checkpoint 2** (after inspection of checkpoint 1): the React Flow canvas — palette, nodes, connections, configuration panel, autosave/load. Pending decisions from Phase 8: submit the Sarvam applications manually from your own browser, then mark them submitted.

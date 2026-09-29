@@ -162,6 +162,16 @@ export type AuditAction =
   | "application_paused"
   | "application_resumed"
   | "application_stopped"
+  | "workflow_created"
+  | "workflow_edited"
+  | "workflow_version_saved"
+  | "workflow_activated"
+  | "workflow_deactivated"
+  | "workflow_archived"
+  | "workflow_restored"
+  | "workflow_duplicated"
+  | "workflow_exported"
+  | "workflow_imported"
   | "signature_preset_saved"
   | "signature_preset_deleted";
 

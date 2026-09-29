@@ -174,6 +174,9 @@ model User {
 
   applicationSettings ApplicationSettings?
 
+  workflows        Workflow[]
+  workflowVersions WorkflowVersion[]
+
   @@map("users")
 }
 
@@ -2960,4 +2963,64 @@ model ApplicationSettings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("application_settings")
+}
+
+// ─── Phase 9 — Workflow Builder ─────────────────────────────────────────────────────────────
+
+/// A user's automation. The editor autosaves `draftDefinition` (optimistic lock: draftRevision);
+/// "Save version" freezes it into an immutable WorkflowVersion that executions pin.
+model Workflow {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  name            String
+  description     String?
+  tags            String[]  @default([])
+  /// DRAFT | ACTIVE | ARCHIVED
+  status          String    @default("DRAFT")
+  /// Autosaved editor state (validated by the definition schema on every write)
+  draftDefinition Json      @map("draft_definition")
+  draftRevision   Int       @default(1) @map("draft_revision")
+  draftSavedAt    DateTime  @default(now()) @map("draft_saved_at") @db.Timestamptz(3)
+  latestVersion   Int       @default(0) @map("latest_version")
+  activeVersionId String?   @unique @map("active_version_id") @db.Uuid
+  activatedAt     DateTime? @map("activated_at") @db.Timestamptz(3)
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz(3)
+  /// Set when created from a template or duplicated/imported
+  origin          String    @default("BLANK")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeVersion WorkflowVersion?  @relation("WorkflowActiveVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions      WorkflowVersion[] @relation("WorkflowVersions")
+
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@map("workflows")
+}
+
+/// Immutable snapshot of a workflow definition. Executions always reference one exact version.
+model WorkflowVersion {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  workflowId       String   @map("workflow_id") @db.Uuid
+  versionNumber    Int      @map("version_number")
+  definition       Json
+  definitionHash   String   @map("definition_hash") @db.Char(64)
+  schemaVersion    Int      @map("schema_version")
+  /// { [nodeType]: typeVersion } of the node implementations this version uses
+  nodeVersions     Json     @map("node_versions")
+  /// VALID | INVALID (only VALID versions can be activated or run)
+  validationStatus String   @map("validation_status")
+  /// Validation report at save time (checks + issues; no candidate data)
+  validation       Json
+  note             String?
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow  Workflow  @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
+  activeFor Workflow? @relation("WorkflowActiveVersion")
+
+  @@unique([workflowId, versionNumber])
+  @@index([userId])
+  @@map("workflow_versions")
 }
